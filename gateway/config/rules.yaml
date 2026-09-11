@@ -1,0 +1,27 @@
+# Rules for the AI Security Gateway.
+#
+# This is config, not code. Editing it changes what the gateway looks for,
+# never how it works. Safe to keep in your own version control.
+#
+# Categories are named and independent. Add your own; the gateway reads
+# whatever is here.
+
+categories:
+
+  # Pattern-based. A pattern either matches or it doesn't, so there are
+  # no thresholds here. Patterns are filled in during Phase 2.
+  pii:
+    enabled: true
+    action: redact
+    patterns: []
+
+  # Semantic. Compares incoming text against the examples below and scores
+  # how close it is. Built in Phase 7 — thresholds come from real data then,
+  # not from a guess now.
+  injection:
+    enabled: false
+    action: block
+    thresholds:
+      low: null
+      high: null
+    examples: []

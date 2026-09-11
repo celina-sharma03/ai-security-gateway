@@ -1,0 +1,26 @@
+# Runtime dependencies.
+#
+# This file grows phase by phase rather than installing everything up front.
+# See DECISIONS.md for the full planned stack.
+
+# --- Phase 0: config ---
+pydantic==2.12.3
+pydantic-settings==2.12.0
+PyYAML==6.0.3
+
+# --- Phase 4: proxy (not yet) ---
+# fastapi
+# uvicorn[standard]
+# httpx
+
+# --- Phase 5: storage and auth (not yet) ---
+# SQLAlchemy
+# alembic
+# passlib[bcrypt]
+# python-jose[cryptography]
+# structlog
+
+# --- Phase 7: semantic detection (not yet) ---
+# sentence-transformers
+# presidio-analyzer
+# presidio-anonymizer

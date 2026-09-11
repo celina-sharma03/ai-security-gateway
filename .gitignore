@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets and local config
+.env
+*.local.yaml
+
+# Data
+*.db
+*.sqlite3
+eval/data/*
+!eval/data/.gitkeep
+
+# Models (downloaded on first run, ~80MB)
+models/
+.cache/
+
+# Frontend
+dashboard/node_modules/
+dashboard/dist/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

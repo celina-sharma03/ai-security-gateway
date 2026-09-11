@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.git/
+.env
+*.db
+*.sqlite3
+eval/
+tests/
+docs/
+dashboard/node_modules/
+DECISIONS.md
+FRICTION.md
