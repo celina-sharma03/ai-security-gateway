@@ -1,8 +1,9 @@
-"""Show what's in the evaluation set.
+"""Show what's in the evaluation set, and how the checks score against it.
 
-python -m eval            summary
+python -m eval            summary of the set
 python -m eval --tricky   only the cases designed to fool a naive pattern
 python -m eval --all      every case
+python -m eval --score    run the redaction check and report every failure
 """
 
 import sys
@@ -46,6 +47,12 @@ def show_cases(cases: list) -> None:
 def main() -> None:
     _use_utf8_output()
     args = set(sys.argv[1:])
+
+    if "--score" in args:
+        from eval.score import report
+
+        report()
+        return
 
     if "--tricky" in args:
         hard = [c for c in load_all() if c.tricky]

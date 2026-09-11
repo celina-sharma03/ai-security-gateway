@@ -39,3 +39,31 @@ instead of crashing. See `_use_utf8_output()` in `eval/__main__.py`.
 anything that prints an error message. It is not obvious, it only shows up on
 Windows, and the failure looks like a bug in the program rather than in the
 terminal.
+
+## Phase 2
+
+**The test data was wrong, not the code.** The PAN positives used `ABCDE1234F`,
+which is structurally impossible — the fourth character of a real PAN encodes the
+holder type, and `D` is not one of them. The validator correctly rejected it and
+the test correctly failed. Fixed the data.
+
+Worth remembering: when a check fails a case, the case might be the thing that's
+wrong. Verify the expected answer before changing the code to produce it.
+
+**Aadhaar checksum validation is written but not switched on.** Real Aadhaar
+numbers satisfy a Verhoeff checksum, and `passes_verhoeff()` implements it.
+It isn't wired into the pattern because our test numbers are invented, and
+invented numbers fail a real checksum — turning it on would fail our own
+positive cases rather than prove anything.
+
+**To finish this:** generate Verhoeff-valid synthetic numbers for the evaluation
+set, then add the validator to the Aadhaar pattern. That would let the pattern
+drop its context requirement and catch a bare Aadhaar number with no
+surrounding words, which it currently cannot.
+
+**Three categories cannot be identified by shape alone** — bare phone numbers,
+Aadhaar, and PAN. `9876543210` is a mobile number in one sentence and an invoice
+reference in another, and they are the same ten digits. These patterns require a
+nearby word, which means a value pasted with no context around it is missed. That
+is a deliberate trade: missing one is better than redacting every invoice number
+in the company.

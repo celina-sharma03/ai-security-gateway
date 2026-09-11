@@ -138,13 +138,19 @@ cases:
 
   # ─── PAN ─────────────────────────────────────────────────────────────
 
-  - text: "PAN: ABCDE1234F"
+  - text: "PAN: ABCPE1234F"
     expect: pan
-    note: "five letters, four digits, one letter"
+    note: "five letters, four digits, one letter. The 4th character must be a
+           real holder-type code -- P for an individual here. ABCDE1234F, which
+           this case used to be, is structurally impossible as a PAN."
 
-  - text: "pan card number abcde1234f"
+  - text: "pan card number abcpe1234f"
     expect: pan
     note: "lowercase"
+
+  - text: "my permanent account number is AAACP1234H"
+    expect: pan
+    note: "spelled out rather than abbreviated -- C is a company"
 
   # ─── IP addresses ────────────────────────────────────────────────────
   # Personal data under GDPR when it identifies a person.
