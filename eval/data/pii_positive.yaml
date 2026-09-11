@@ -1,0 +1,174 @@
+# Things the gateway MUST catch.
+#
+# Everything here is synthetic. Card numbers are the published test numbers
+# that payment processors provide for exactly this purpose — they pass the
+# Luhn checksum but belong to nobody. API keys are documentation examples.
+# Names, emails and phone numbers are invented.
+#
+# Each case says what it contains and, where the text isn't the whole story,
+# why it's here.
+
+cases:
+
+  # ─── Credit cards ────────────────────────────────────────────────────
+  # Published test numbers. All pass Luhn.
+
+  - text: "my card is 4111 1111 1111 1111"
+    expect: credit_card
+    note: "Visa, space-separated — the most common way people paste one"
+
+  - text: "card: 4111111111111111"
+    expect: credit_card
+    note: "no separators"
+
+  - text: "use 4111-1111-1111-1111 for the payment"
+    expect: credit_card
+    note: "dash-separated"
+
+  - text: "charge it to 5500 0000 0000 0004"
+    expect: credit_card
+    note: "Mastercard"
+
+  - text: "amex 3782 822463 10005"
+    expect: credit_card
+    note: "American Express — 15 digits, not 16, and grouped 4-6-5"
+
+  - text: "6011 1111 1111 1117 is the card on file"
+    expect: credit_card
+    note: "Discover"
+
+  - text: "Here's the config: card=4111111111111111, exp=12/28, cvv=123"
+    expect: credit_card
+    note: "buried in a config-looking string alongside other fields"
+
+  # ─── API keys and secrets ────────────────────────────────────────────
+  # Documentation examples and clearly-fake values.
+
+  - text: "my openai key is sk-proj-not-a-real-key-00000000000000000000"
+    expect: api_key
+    note: "OpenAI project key prefix"
+
+  - text: "OPENAI_API_KEY=sk-not-a-real-key-0000000000000000000000000"
+    expect: api_key
+    note: "classic OpenAI prefix, in env-var form"
+
+  - text: "anthropic: sk-ant-api03-not-a-real-key-000000000000000"
+    expect: api_key
+    note: "Anthropic prefix"
+
+  - text: "aws key AKIAIOSFODNN7EXAMPLE"
+    expect: api_key
+    note: "AWS's own documented example access key ID"
+
+  - text: "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    expect: api_key
+    note: "AWS's documented example secret — no fixed prefix, harder to spot"
+
+  - text: "token: ghp_notarealkey00000000000000000000000"
+    expect: api_key
+    note: "GitHub personal access token"
+
+  - text: "slack webhook uses xoxb-000000000000-000000000000-notarealkey"
+    expect: api_key
+    note: "Slack bot token"
+
+  - text: "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc123"
+    expect: api_key
+    note: "JWT in an auth header"
+
+  - text: "the private key starts -----BEGIN RSA PRIVATE KEY-----"
+    expect: api_key
+    note: "PEM header — the block itself may be long, the header is the tell"
+
+  - text: "db password is hunter2, host is localhost"
+    expect: password
+    note: "password in an otherwise ordinary sentence — the classic accident"
+
+  # ─── Email addresses ─────────────────────────────────────────────────
+
+  - text: "email me at priya.sharma@example.com"
+    expect: email
+    note: "plain"
+
+  - text: "send it to first.last+invoices@sub.domain.co.in"
+    expect: email
+    note: "plus-addressing, subdomain, two-part TLD"
+
+  - text: "contact: RAHUL.VERMA@EXAMPLE.CO.IN"
+    expect: email
+    note: "uppercase"
+
+  - text: "cc priya@example.com and rahul@example.com on the thread"
+    expect: email
+    note: "two in one message — both must be caught, not just the first"
+
+  # ─── Phone numbers ───────────────────────────────────────────────────
+
+  - text: "call me on +91 98765 43210"
+    expect: phone
+    note: "Indian mobile, country code, spaced"
+
+  - text: "my number is 9876543210"
+    expect: phone
+    note: "Indian mobile, bare 10 digits starting with 9"
+
+  - text: "reach him at +91-98765-43210"
+    expect: phone
+    note: "dash-separated"
+
+  - text: "office line +1 (555) 123-4567"
+    expect: phone
+    note: "US format with parentheses"
+
+  - text: "WhatsApp: 08765432109"
+    expect: phone
+    note: "leading zero, as often written in India"
+
+  # ─── Aadhaar ─────────────────────────────────────────────────────────
+  # Synthetic. Real Aadhaar numbers carry a Verhoeff checksum; whether to
+  # validate it is a Phase 2 decision, same question as Luhn for cards.
+
+  - text: "aadhaar 2345 6789 0123"
+    expect: aadhaar
+    note: "spaced in groups of four, the printed format"
+
+  - text: "his aadhar number is 234567890123"
+    expect: aadhaar
+    note: "unspaced, and spelled the common alternative way"
+
+  # ─── PAN ─────────────────────────────────────────────────────────────
+
+  - text: "PAN: ABCDE1234F"
+    expect: pan
+    note: "five letters, four digits, one letter"
+
+  - text: "pan card number abcde1234f"
+    expect: pan
+    note: "lowercase"
+
+  # ─── IP addresses ────────────────────────────────────────────────────
+  # Personal data under GDPR when it identifies a person.
+
+  - text: "the user connected from 203.0.113.42"
+    expect: ip_address
+    note: "IPv4, from the documentation range"
+
+  - text: "client ip 2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+    expect: ip_address
+    note: "IPv6"
+
+  # ─── Several at once ─────────────────────────────────────────────────
+  # The realistic case: someone pastes a whole block.
+
+  - text: |
+      Can you help me debug this?
+      DB_HOST=localhost
+      DB_PASSWORD=hunter2
+      STRIPE_KEY=sk-not-a-real-key-0000000000000000000000000
+      ADMIN_EMAIL=ops@example.com
+    expect_any_of: [password, api_key, email]
+    note: "a pasted .env file — the single most common real-world leak"
+
+  - text: "Customer Priya Sharma, priya@example.com, +91 98765 43210, card 4111 1111 1111 1111 — refund please"
+    expect_any_of: [email, phone, credit_card]
+    note: "a support ticket with everything in one line"

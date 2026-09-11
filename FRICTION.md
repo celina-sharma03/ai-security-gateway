@@ -22,3 +22,20 @@ the venv's own `python.exe` after activation.
 **`pip` was bound to an unrelated project's virtualenv** before this project had
 its own. Anything installed would have landed in the wrong place. The project
 venv has to be created and used explicitly, not assumed.
+
+## Phase 1
+
+**The Windows console cannot print non-ASCII characters by default.** Printing a
+box-drawing character crashed `python -m eval --tricky` outright with a
+`UnicodeEncodeError`, because the default console encoding is cp1252 rather than
+UTF-8. Em dashes in the data file then rendered as `?` even after the crash was
+fixed.
+
+The durable fix is to reconfigure stdout and stderr to UTF-8 at the start of
+every entry point, with `errors="replace"` so an incapable terminal degrades
+instead of crashing. See `_use_utf8_output()` in `eval/__main__.py`.
+
+**Every new entry point needs this**, including the gateway server in Phase 4 and
+anything that prints an error message. It is not obvious, it only shows up on
+Windows, and the failure looks like a bug in the program rather than in the
+terminal.

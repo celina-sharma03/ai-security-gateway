@@ -1,0 +1,154 @@
+# Things the gateway MUST NOT catch.
+#
+# This is the more important file. A missed secret is bad; a redacted invoice
+# number is worse, because it breaks someone's ordinary work and they turn the
+# gateway off that afternoon.
+#
+# Most of these are deliberately shaped like the thing they are not. Cases
+# marked `tricky: true` are the ones a naive pattern will get wrong, and are
+# the real test of Phase 2.
+
+cases:
+
+  # ─── Card-shaped, but not cards ──────────────────────────────────────
+
+  - text: "order number 1234567890123456 hasn't shipped"
+    tricky: true
+    note: "16 digits, but fails the Luhn checksum — no real card looks like this"
+
+  - text: "ISBN 978-0-13-235088-4 is the edition we use"
+    note: "13 digits with dashes, card-ish grouping"
+
+  - text: "transaction ref 2024 1215 0930 4471"
+    tricky: true
+    note: "16 digits in groups of four — visually identical to a card, fails Luhn"
+
+  # ─── Key-shaped, but not keys ────────────────────────────────────────
+
+  - text: "the bug appeared in commit a1b2c3d4e5f67890abcdef1234567890abcdef12"
+    tricky: true
+    note: "40 hex characters — long, random-looking, completely public"
+
+  - text: "request id 550e8400-e29b-41d4-a716-446655440000 failed"
+    note: "UUID — random-looking but not a secret"
+
+  - text: "pull image sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    tricky: true
+    note: "Docker digest, 64 hex characters"
+
+  - text: "we use sk-learn's RandomForest for this"
+    tricky: true
+    note: "starts with sk- but is scikit-learn, not an OpenAI key"
+
+  - text: "decode SGVsbG8gV29ybGQhIFRoaXMgaXMgYSB0ZXN0IHN0cmluZw== and tell me what it says"
+    tricky: true
+    note: "base64, but it's just 'Hello World! This is a test string'"
+
+  - text: "set the build id to BUILD-2024-12-15-abc123XYZdef456"
+    note: "long alphanumeric with a prefix, but a build identifier"
+
+  # ─── IP-shaped, but not IPs ──────────────────────────────────────────
+
+  - text: "upgrade the parser to version 1.2.3.4"
+    tricky: true
+    note: "four dot-separated numbers — indistinguishable from an IPv4 by shape alone"
+
+  - text: "the OS build is 10.0.19041.1"
+    tricky: true
+    note: "Windows version, four parts, all numeric"
+
+  - text: "connect to localhost on port 8080"
+    note: "a hostname, not an address"
+
+  # ─── Phone-shaped, but not phones ────────────────────────────────────
+
+  - text: "the unix timestamp was 1736899200"
+    tricky: true
+    note: "10 digits — exactly the shape of an Indian mobile number"
+
+  - text: "invoice 9876543210 is still unpaid"
+    tricky: true
+    note: "10 digits starting with 9, which is precisely the Indian mobile pattern"
+
+  - text: "pin code 400001, Mumbai"
+    note: "6 digits — short enough to be safe, but worth guarding"
+
+  - text: "the total came to 1,23,456 rupees"
+    note: "Indian digit grouping"
+
+  # ─── PAN-shaped, but not PAN ─────────────────────────────────────────
+
+  - text: "part number ABCDE1234F is out of stock"
+    tricky: true
+    note: "five letters, four digits, one letter — identical in shape to a PAN"
+
+  - text: "booking reference XYZAB1234C"
+    tricky: true
+    note: "airline reference, same shape"
+
+  # ─── Aadhaar-shaped, but not Aadhaar ─────────────────────────────────
+
+  - text: "the account number is 234567890123"
+    tricky: true
+    note: "12 digits, same as Aadhaar"
+
+  - text: "millisecond timestamp 1736899200000"
+    note: "13 digits — one longer, but close enough to worry about"
+
+  # ─── Email-shaped, but not addresses ─────────────────────────────────
+
+  - text: "npm install @angular/core and @types/node"
+    tricky: true
+    note: "scoped package names — an @ followed by a slash-separated path"
+
+  - text: "use the @property decorator on that method"
+    note: "Python decorator"
+
+  - text: "ping @channel when the deploy finishes"
+    note: "a Slack mention"
+
+  - text: "the regex is user@[a-z]+\\.com"
+    tricky: true
+    note: "a pattern that describes an email without being one"
+
+  # ─── Talks about secrets without containing any ──────────────────────
+  # The equivalent of asking how antivirus works without writing a virus.
+
+  - text: "How do I validate a credit card number in Python?"
+    tricky: true
+    note: "mentions cards, contains none — a completely ordinary developer question"
+
+  - text: "Where should I store my API keys so they don't end up in git?"
+    tricky: true
+    note: "asking the right question, and the gateway would insult them by blocking it"
+
+  - text: "Write a form that collects a name, email and phone number"
+    tricky: true
+    note: "names all three categories, contains none of them"
+
+  - text: "What's the correct format for an Aadhaar number?"
+    tricky: true
+    note: "a question about the format, not an instance of it"
+
+  # ─── Ordinary traffic ────────────────────────────────────────────────
+  # Almost everything real looks like this. It must pass silently.
+
+  - text: "How do I center a div with flexbox?"
+    note: "the single most common question on the internet"
+
+  - text: "Explain recursion using a simple example"
+
+  - text: "Summarise this quarter's sales figures into three bullet points"
+
+  - text: "What's the difference between a list and a tuple in Python?"
+
+  - text: "Draft a polite reply declining the meeting on Thursday"
+
+  - text: "Translate 'where is the railway station' into Marathi"
+
+  - text: |
+      Review this function for bugs:
+
+      def total(items):
+          return sum(i.price for i in items)
+    note: "a code block with nothing sensitive in it"

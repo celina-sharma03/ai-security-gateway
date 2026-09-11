@@ -15,8 +15,10 @@ venv/
 # Data
 *.db
 *.sqlite3
-eval/data/*
-!eval/data/.gitkeep
+
+# Hand-written evaluation cases belong in version control. Bulk datasets
+# downloaded in Phase 7 do not — they're large and fetched by a script.
+eval/data/downloaded/
 
 # Models (downloaded on first run, ~80MB)
 models/
