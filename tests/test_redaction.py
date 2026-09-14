@@ -173,3 +173,16 @@ def test_same_digits_read_differently_by_context():
 def test_version_string_is_not_an_ip_address():
     assert redaction.check("upgrade the parser to version 1.2.3.4").categories == frozenset()
     assert redaction.check("the user connected from 203.0.113.42").categories == {"ip_address"}
+
+
+def test_context_word_must_be_a_whole_word():
+    """A context word hiding inside another word used to count: 'pan' in
+    'company', 'uid' in 'guide', 'reach' in 'breach'."""
+    assert redaction.check("our company code is ABCPE1234F").action is Action.ALLOW
+    assert redaction.check("PAN: ABCPE1234F").categories == {"pan"}
+
+
+def test_common_forms_of_a_context_word_still_count():
+    """Whole-word matching must not lose the everyday forms people write."""
+    assert redaction.check("calling 9876543210 now").categories == {"phone"}
+    assert redaction.check("both numbers are 9876543210 and 9123456789").categories == {"phone"}

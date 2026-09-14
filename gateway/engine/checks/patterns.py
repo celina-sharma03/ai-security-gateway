@@ -45,8 +45,13 @@ class Pattern:
 
 
 def _c(*words: str) -> re.Pattern[str]:
-    """A case-insensitive alternation of context words."""
-    return re.compile(r"(?:" + "|".join(words) + r")", re.IGNORECASE)
+    """A case-insensitive match on any of these words, as whole words only.
+
+    The word edges matter. Without them "pan" matches inside "company", "uid"
+    inside "guide" and "reach" inside "breach", and ordinary sentences get
+    their numbers redacted.
+    """
+    return re.compile(r"\b(?:" + "|".join(words) + r")\b", re.IGNORECASE)
 
 
 PATTERNS: tuple[Pattern, ...] = (
@@ -140,7 +145,17 @@ PATTERNS: tuple[Pattern, ...] = (
         category="phone",
         regex=re.compile(r"\b0?[6-9]\d{9}\b"),
         needs_context=_c(
-            "phone", "mobile", "number", "call", "whatsapp", "contact", "reach", "cell"
+            "phone",
+            "phones",
+            "mobile",
+            "number",
+            "numbers",
+            "call",
+            "calling",
+            "whatsapp",
+            "contact",
+            "reach",
+            "cell",
         ),
         label="bare-with-context",
     ),
@@ -173,7 +188,7 @@ PATTERNS: tuple[Pattern, ...] = (
         category="ip_address",
         regex=re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
         validator=lambda v: all(0 <= int(p) <= 255 for p in v.split(".")),
-        blocked_by_context=_c("version", "build", "release", r"\bv\d"),
+        blocked_by_context=_c("version", "build", "release", r"v\d+"),
         label="ipv4",
     ),
     Pattern(
