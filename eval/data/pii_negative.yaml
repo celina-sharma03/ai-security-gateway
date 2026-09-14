@@ -23,6 +23,14 @@ cases:
     tricky: true
     note: "16 digits in groups of four — visually identical to a card, fails Luhn"
 
+  - text: "tracking number 8123 4567 8901 2345"
+    tricky: true
+    note: "starts with 81, a real RuPay range, but fails Luhn"
+
+  - text: "shipment 2500 1000 2000 3000 is delayed"
+    tricky: true
+    note: "starts inside Mastercard's 2-series range, but fails Luhn"
+
   # ─── Key-shaped, but not keys ────────────────────────────────────────
 
   - text: "the bug appeared in commit a1b2c3d4e5f67890abcdef1234567890abcdef12"

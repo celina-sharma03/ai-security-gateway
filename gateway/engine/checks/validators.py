@@ -36,15 +36,32 @@ def passes_luhn(value: str) -> bool:
     return total % 10 == 0
 
 
-#: Card numbers begin with the issuer's range: 3 American Express and Diners,
-#: 4 Visa, 5 Mastercard, 6 Discover and RuPay. Nothing real begins with 0, 1,
-#: 2, 7, 8 or 9, which rules out most invoice and reference numbers outright.
-CARD_PREFIXES = ("3", "4", "5", "6")
+#: Where card numbers begin. Every real card starts inside its issuer's range,
+#: which rules out most invoice and reference numbers before Luhn even runs.
+#:
+#:   3            American Express, Diners Club, JCB
+#:   4            Visa
+#:   5            Mastercard, Maestro
+#:   6            Discover, UnionPay, Maestro, RuPay
+#:   81, 82       RuPay
+#:   2221-2720    Mastercard's 2-series, issued since 2017
+#:
+#: The 2-series is an exact range on purpose. Accepting every number that
+#: starts with 2 would sweep in reference numbers like "2024 1215 0930 4471",
+#: and 2024 sits below 2221.
+CARD_PREFIXES = ("3", "4", "5", "6", "81", "82")
+MASTERCARD_2_SERIES = range(2221, 2721)
+
+
+def has_card_prefix(digits: str) -> bool:
+    if digits.startswith(CARD_PREFIXES):
+        return True
+    return len(digits) >= 4 and int(digits[:4]) in MASTERCARD_2_SERIES
 
 
 def looks_like_card(value: str) -> bool:
     digits = digits_only(value)
-    return 13 <= len(digits) <= 19 and digits.startswith(CARD_PREFIXES) and passes_luhn(digits)
+    return 13 <= len(digits) <= 19 and has_card_prefix(digits) and passes_luhn(digits)
 
 
 # --- Verhoeff, used by Aadhaar -------------------------------------------

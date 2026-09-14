@@ -37,6 +37,16 @@ cases:
     expect: credit_card
     note: "Discover"
 
+  - text: "new card 2223 0031 2200 3222"
+    expect: credit_card
+    note: "Mastercard 2-series (2221-2720), issued since 2017. Published test
+           number. The first version of the prefix rule missed it entirely."
+
+  - text: "paying with 8150 0000 0000 1231"
+    expect: credit_card
+    note: "RuPay, India's own card network, in the 81 range. Synthetic, built to
+           pass Luhn. Also missed by the first version of the prefix rule."
+
   - text: "Here's the config: card=4111111111111111, exp=12/28, cvv=123"
     expect: credit_card
     note: "buried in a config-looking string alongside other fields"

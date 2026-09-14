@@ -117,7 +117,14 @@ def test_several_categories_in_one_message():
 
 @pytest.mark.parametrize(
     "number",
-    ["4111111111111111", "5500000000000004", "378282246310005", "6011111111111117"],
+    [
+        "4111111111111111",
+        "5500000000000004",
+        "378282246310005",
+        "6011111111111117",
+        "2223003122003222",
+        "8150000000001231",
+    ],
 )
 def test_real_test_cards_pass_luhn(number):
     assert passes_luhn(number)
@@ -129,9 +136,22 @@ def test_reference_numbers_fail_luhn(number):
 
 
 def test_card_prefix_rules_out_non_card_numbers():
-    """Nothing real starts with 0, 1, 2, 7, 8 or 9."""
     assert not looks_like_card("1234567890123456")
     assert looks_like_card("4111111111111111")
+
+
+def test_mastercard_2_series_and_rupay_are_cards():
+    """Both were missed by the first version of the prefix rule, which assumed
+    no real card starts with 2 or 8."""
+    assert looks_like_card("2223003122003222")
+    assert looks_like_card("8150000000001231")
+
+
+@pytest.mark.parametrize("number", ["2220999999999991", "2721000000000004"])
+def test_mastercard_2_series_range_is_exact(number):
+    """Just outside 2221-2720. Both pass Luhn, so only the range keeps them out."""
+    assert passes_luhn(number)
+    assert not looks_like_card(number)
 
 
 def test_pan_holder_type_character():
