@@ -10,14 +10,22 @@ it possible to put the real values back in the response later.
 
 Most values are replaced whole. A UPI ID is the exception: only the name is
 hidden, because the handle isn't personal and is usually what the answer needs.
+
+What happens to each category -- redact, block, log, or not looked for at
+all -- comes from the rules. See gateway/engine/rules.py.
 """
 
 import re
+from collections.abc import Iterable
 
-from gateway.engine.checks.patterns import PATTERNS, Pattern
+from gateway.engine.checks.patterns import Pattern
 from gateway.engine.result import Action, CheckResult, Finding
+from gateway.engine.rules import Rules
 
 CHECK_NAME = "redaction"
+
+#: Every built-in category redacted -- the same as an empty rules file.
+DEFAULT_RULES = Rules()
 
 
 class _Match:
@@ -60,10 +68,10 @@ def _context_ok(pattern: Pattern, text: str, start: int, end: int) -> bool:
     return pattern.needs_context is None or bool(pattern.needs_context.search(before))
 
 
-def _collect(text: str) -> list[_Match]:
+def _collect(text: str, patterns: Iterable[Pattern]) -> list[_Match]:
     found: list[_Match] = []
 
-    for pattern in PATTERNS:
+    for pattern in patterns:
         for match in pattern.regex.finditer(text):
             start, end = match.span(pattern.group)
             value = match.group(pattern.group)
@@ -116,26 +124,40 @@ def _drop_overlaps(matches: list[_Match]) -> list[_Match]:
     return kept
 
 
-def check(text: str) -> CheckResult:
-    """Scan text and return what was found, with a redacted version of it."""
-    matches = _drop_overlaps(_collect(text))
+def check(text: str, rules: Rules | None = None) -> CheckResult:
+    """Scan text and return what was found, with a redacted version of it.
 
-    if not matches:
-        return CheckResult.allow(CHECK_NAME)
+    `rules` decides which categories are looked for and what happens to each
+    one. Without it, every built-in category is redacted.
+    """
+    if rules is None:
+        rules = DEFAULT_RULES
 
+    matches = _drop_overlaps(_collect(text, rules.patterns))
+
+    action = Action.ALLOW
     counters: dict[str, int] = {}
     seen: dict[tuple[str, str], str] = {}
     findings: list[Finding] = []
 
     for match in matches:
-        key = (match.prefix, match.text)
+        match_action = rules.action_for(match.category)
+        if match_action is None:
+            continue
 
-        if key in seen:
-            placeholder = seen[key]
-        else:
-            counters[match.prefix] = counters.get(match.prefix, 0) + 1
-            placeholder = f"[{match.prefix}_{counters[match.prefix]}]"
-            seen[key] = placeholder
+        action = max(action, match_action)
+
+        # Only redacted values get a placeholder. A logged or blocked value is
+        # recorded as found, but left where it is.
+        placeholder = ""
+        if match_action is Action.REDACT:
+            key = (match.prefix, match.text)
+            if key in seen:
+                placeholder = seen[key]
+            else:
+                counters[match.prefix] = counters.get(match.prefix, 0) + 1
+                placeholder = f"[{match.prefix}_{counters[match.prefix]}]"
+                seen[key] = placeholder
 
         findings.append(
             Finding(
@@ -147,14 +169,17 @@ def check(text: str) -> CheckResult:
             )
         )
 
-    redacted = _rewrite(text, findings)
+    if not findings:
+        return CheckResult.allow(CHECK_NAME)
+
+    replaced = [f for f in findings if f.placeholder]
     categories = sorted({f.category for f in findings})
 
     return CheckResult(
         check=CHECK_NAME,
-        action=Action.REDACT,
+        action=action,
         findings=tuple(findings),
-        text=redacted,
+        text=_rewrite(text, replaced) if replaced else None,
         # The reason names the categories but never the values, because it
         # gets written to logs and a log full of secrets is a worse leak
         # than the one being prevented.

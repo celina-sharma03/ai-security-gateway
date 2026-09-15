@@ -1,27 +1,53 @@
 # Rules for the AI Security Gateway.
 #
-# This is config, not code. Editing it changes what the gateway looks for,
-# never how it works. Safe to keep in your own version control.
+# This file decides what happens when the gateway finds something. It never
+# changes how finding works -- that lives in code, where it is tested.
 #
-# Categories are named and independent. Add your own; the gateway reads
-# whatever is here.
+# Safe to keep in your own version control. A mistake in this file stops the
+# gateway from starting, with a message saying what is wrong, rather than being
+# quietly ignored.
+
+
+# ─── What to do with each kind of value ────────────────────────────────
+#
+#   redact   hide the value and send the rest of the message on   (default)
+#   block    stop the whole request; nothing reaches the provider
+#   log      send the message unchanged, but record what was found
+#   off      don't look for this at all
+#
+# A category left out of this list is redacted. Deleting a line can never
+# quietly switch detection off.
 
 categories:
+  credit_card: redact
+  api_key: redact
+  password: redact
+  email: redact
+  phone: redact
+  aadhaar: redact
+  pan: redact
+  ip_address: redact
+  upi_id: redact
 
-  # Pattern-based. A pattern either matches or it doesn't, so there are
-  # no thresholds here. Patterns are filled in during Phase 2.
-  pii:
-    enabled: true
-    action: redact
-    patterns: []
 
-  # Semantic. Compares incoming text against the examples below and scores
-  # how close it is. Built in Phase 7 — thresholds come from real data then,
-  # not from a guess now.
-  injection:
-    enabled: false
-    action: block
-    thresholds:
-      low: null
-      high: null
-    examples: []
+# ─── Your own patterns ─────────────────────────────────────────────────
+#
+# For values only your organisation has, like employee IDs or project
+# codenames.
+#
+#   name           becomes the category, e.g. [EMPLOYEE_ID_1]
+#   pattern        a regular expression. Wrap it in \b so it can't match
+#                  inside a longer word.
+#   action         redact, block, log or off. Defaults to redact.
+#   needs_context  optional. Whole words, at least one of which must appear
+#                  shortly before the match.
+#
+# Example:
+#
+#   custom:
+#     - name: employee_id
+#       pattern: '\bEMP-\d{5}\b'
+#       action: redact
+#       needs_context: [employee, emp]
+
+custom: []

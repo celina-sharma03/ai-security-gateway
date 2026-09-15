@@ -33,8 +33,20 @@ class Action(str, Enum):
     def severity(self) -> int:
         return _SEVERITY[self]
 
+    # All four comparisons are needed, not only __lt__. Action is also a str, so
+    # any comparison left undefined falls back to comparing the words
+    # alphabetically -- and max() compares with >, where "redact" beats "block".
     def __lt__(self, other: "Action") -> bool:
         return self.severity < other.severity
+
+    def __le__(self, other: "Action") -> bool:
+        return self.severity <= other.severity
+
+    def __gt__(self, other: "Action") -> bool:
+        return self.severity > other.severity
+
+    def __ge__(self, other: "Action") -> bool:
+        return self.severity >= other.severity
 
 
 _SEVERITY = {

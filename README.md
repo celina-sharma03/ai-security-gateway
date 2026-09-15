@@ -17,8 +17,17 @@ already going there.
 
 ## Status
 
-**Phase 0 of 10 — skeleton only.** It runs and loads its config. It does not
-check anything yet. See [DECISIONS.md](DECISIONS.md) for the full plan.
+**Phase 3 of 10.** It finds and redacts personal data and secrets — cards, API
+keys, passwords, emails, phone numbers, Aadhaar, PAN, IP addresses and UPI IDs —
+through a pipeline that reads its rules from `rules.yaml` and respects shadow
+mode. It is not a proxy yet: nothing is forwarded to a provider. See
+[DECISIONS.md](DECISIONS.md) for the full plan.
+
+Try it:
+
+```bash
+.venv/Scripts/python.exe -m gateway check "my card is 4111 1111 1111 1111" --mode enforce
+```
 
 ---
 

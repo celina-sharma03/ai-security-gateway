@@ -10,16 +10,7 @@ python -m eval --holdout  run it on the independently written holdout cases
 import sys
 
 from eval.dataset import load_all, load_holdout, load_negative, load_positive, summary
-
-
-def _use_utf8_output() -> None:
-    """Windows consoles default to cp1252, which mangles or crashes on any
-    non-ASCII character. Ask for UTF-8, and fall back to replacing characters
-    rather than raising if the terminal genuinely can't manage it."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="replace")
+from gateway.console import use_utf8_output
 
 
 def show_summary() -> None:
@@ -37,8 +28,6 @@ def show_summary() -> None:
 
 
 def show_cases(cases: list) -> None:
-    # ASCII only. The default Windows console encoding is cp1252 and cannot
-    # print box-drawing characters, which crashes the whole command.
     for case in cases:
         print(f"  {case}")
         if case.note:
@@ -46,7 +35,7 @@ def show_cases(cases: list) -> None:
 
 
 def main() -> None:
-    _use_utf8_output()
+    use_utf8_output()
     args = set(sys.argv[1:])
 
     if "--score" in args:

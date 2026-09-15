@@ -134,7 +134,11 @@ score  0.0 ────── low ────── high ────── 1.0
 
 **Redaction uses no thresholds.** A pattern either matches or it doesn't. The two check types behave differently by nature, which the shared action shape already handles.
 
-**Rules live in a plain editable config file**, shipped with working defaults. It's *config, not code* — editing changes what the gateway looks for, never how it works. And the person editing is the operator, not the person being checked.
+**Rules live in a plain editable config file**, shipped with working defaults. It's *config, not code* — editing changes what the gateway does about what it finds, never how finding works. And the person editing is the operator, not the person being checked.
+
+**The file controls detection; it doesn't contain it.** For each category the operator chooses `redact`, `block`, `log` or `off`, and can add patterns of their own — employee IDs, project codenames. The built-in patterns, checksums and context rules stay in code, where they're tested, so an edit can't quietly break them. (The alternative, moving every regex into the file, would expose the fragile part to editing, and still couldn't hold logic like Luhn.)
+
+**A mistake in the file is an error, never a silent fallback.** An unknown category, an unknown action, or a broken regex stops the gateway starting, with a message saying what's wrong. An operator who writes `phnoe: off` believes phone numbers are no longer redacted; carrying on quietly would leave them wrong about their own gateway. A category left out of the file is redacted, so deleting a line can never switch detection off.
 
 ---
 

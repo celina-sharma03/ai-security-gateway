@@ -67,3 +67,15 @@ reference in another, and they are the same ten digits. These patterns require a
 nearby word, which means a value pasted with no context around it is missed. That
 is a deliberate trade: missing one is better than redacting every invoice number
 in the company.
+
+## Phase 3
+
+**YAML reads a bare `off` as the boolean false.** `phone: off` in rules.yaml arrives
+in Python as `phone: False`, not the word "off" — and `no`, `yes` and `on` are
+turned into booleans the same way. Left alone, the most natural thing an operator
+could write would be rejected with a confusing message about booleans. The rules
+loader turns `false` back into `off`, and a test writes `off` in real YAML to keep
+it that way.
+
+Anyone adding a setting that takes words must remember this. Quoting the value
+(`phone: "off"`) also avoids it, but no operator should have to know that.
