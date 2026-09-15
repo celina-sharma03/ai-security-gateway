@@ -201,12 +201,36 @@ def test_upi_id_with_unknown_handle_needs_context():
 
 
 def test_upi_match_wins_over_the_phone_number_inside_it():
-    """Both patterns match the digits. The longer UPI match is the specific one,
-    and keeping the phone finding would redact only half the ID."""
+    """Both patterns match the digits. The UPI match is the specific one, so the
+    ID is treated as a UPI ID rather than a bare phone number."""
     result = redaction.check("my number and upi: 9812345678@paytm")
     assert result.categories == {"upi_id"}
-    assert result.text == "my number and upi: [UPI_ID_1]"
+    assert result.text == "my number and upi: [UPI_NAME_1]@paytm"
 
 
 def test_email_is_not_mistaken_for_upi():
     assert redaction.check("email priya@gmail.com").categories == {"email"}
+
+
+def test_upi_hides_the_name_and_keeps_the_handle():
+    """The handle isn't personal, and it's what the answer depends on: the AI
+    can only say "@axis isn't a real handle" if it can see @axis."""
+    result = redaction.check("is this upi valid Celina@AXIS?")
+    assert result.text == "is this upi valid [UPI_NAME_1]@AXIS?"
+
+
+def test_upi_round_trip_restores_the_name():
+    result = redaction.check("pay me at ravi@ybl")
+    reply = f"Send it to {result.findings[0].placeholder}@ybl in PhonePe."
+
+    assert redaction.restore(reply, result.mapping) == "Send it to ravi@ybl in PhonePe."
+
+
+def test_upi_id_named_by_a_mobile_number_needs_no_context():
+    result = redaction.check("send 200 to 9123456780@newbank")
+    assert result.categories == {"upi_id"}
+    assert result.text == "send 200 to [UPI_NAME_1]@newbank"
+
+
+def test_upi_handle_that_names_a_bank_needs_no_context():
+    assert redaction.check("Celina@AXIS?").categories == {"upi_id"}

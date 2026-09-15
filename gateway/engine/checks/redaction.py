@@ -4,9 +4,12 @@ Deliberately not an AI model. These values have rigid shapes, and a pattern
 plus a checksum beats a model on both accuracy and speed -- an API key has no
 meaning for a model to understand, it is just characters.
 
-Placeholders are numbered per category and reused for repeated values, so the
-same address twice becomes [EMAIL_1] twice. That consistency is what makes it
-possible to put the real values back in the response later.
+Placeholders are numbered per kind of value and reused for repeated values, so
+the same address twice becomes [EMAIL_1] twice. That consistency is what makes
+it possible to put the real values back in the response later.
+
+Most values are replaced whole. A UPI ID is the exception: only the name is
+hidden, because the handle isn't personal and is usually what the answer needs.
 """
 
 import re
@@ -18,13 +21,23 @@ CHECK_NAME = "redaction"
 
 
 class _Match:
-    __slots__ = ("category", "start", "end", "text")
+    __slots__ = ("category", "start", "end", "text", "whole_length", "prefix")
 
-    def __init__(self, category: str, start: int, end: int, text: str) -> None:
+    def __init__(
+        self,
+        category: str,
+        start: int,
+        end: int,
+        text: str,
+        whole_length: int,
+        prefix: str,
+    ) -> None:
         self.category = category
         self.start = start
         self.end = end
         self.text = text
+        self.whole_length = whole_length
+        self.prefix = prefix
 
     @property
     def length(self) -> int:
@@ -58,9 +71,11 @@ def _collect(text: str) -> list[_Match]:
             if not value:
                 continue
 
+            # The validator sees the whole match. A UPI pattern replaces only the
+            # name, but needs the handle to decide whether it's a UPI ID at all.
             if pattern.validator is not None:
                 try:
-                    if not pattern.validator(value):
+                    if not pattern.validator(match.group(0)):
                         continue
                 except (ValueError, IndexError):
                     continue
@@ -68,7 +83,16 @@ def _collect(text: str) -> list[_Match]:
             if not _context_ok(pattern, text, match.start(), match.end()):
                 continue
 
-            found.append(_Match(pattern.category, start, end, value))
+            found.append(
+                _Match(
+                    category=pattern.category,
+                    start=start,
+                    end=end,
+                    text=value,
+                    whole_length=match.end() - match.start(),
+                    prefix=pattern.placeholder or pattern.category.upper(),
+                )
+            )
 
     return found
 
@@ -77,9 +101,11 @@ def _drop_overlaps(matches: list[_Match]) -> list[_Match]:
     """Keep the longest match where two patterns cover the same characters.
 
     A card number and a bare phone number can both match the same digits.
-    The longer match is the more specific one.
+    The longer match is the more specific one. When the parts being replaced are
+    the same length, the longer whole match wins: in "9812345678@paytm" the
+    digits are the name of a UPI ID, not a phone number followed by stray text.
     """
-    ordered = sorted(matches, key=lambda m: (m.start, -m.length))
+    ordered = sorted(matches, key=lambda m: (m.start, -m.length, -m.whole_length))
 
     kept: list[_Match] = []
     for match in ordered:
@@ -102,13 +128,13 @@ def check(text: str) -> CheckResult:
     findings: list[Finding] = []
 
     for match in matches:
-        key = (match.category, match.text)
+        key = (match.prefix, match.text)
 
         if key in seen:
             placeholder = seen[key]
         else:
-            counters[match.category] = counters.get(match.category, 0) + 1
-            placeholder = f"[{match.category.upper()}_{counters[match.category]}]"
+            counters[match.prefix] = counters.get(match.prefix, 0) + 1
+            placeholder = f"[{match.prefix}_{counters[match.prefix]}]"
             seen[key] = placeholder
 
         findings.append(

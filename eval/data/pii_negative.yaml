@@ -137,6 +137,14 @@ cases:
     tricky: true
     note: "a UPI reference number, not an ID -- the same call as the RRN in the holdout"
 
+  - text: "ssh raj@home and restart nginx"
+    tricky: true
+    note: "a server login: name@word with no dot, no bank in the handle, no 'upi'"
+
+  - text: "log in as root@server first"
+    tricky: true
+    note: "the same shape as a UPI ID, and exactly what developers paste into chat"
+
   # ─── A context word hiding inside another word ───────────────────────
   # Context words must match as whole words. Before that was enforced,
   # all three of these were redacted.

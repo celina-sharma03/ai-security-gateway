@@ -145,6 +145,28 @@ cases:
     expect: upi_id
     note: "the phone pattern also matches the digits; the longer UPI match must win"
 
+  - text: "Celina@AXIS?"
+    expect: upi_id
+    note: "no 'upi' word, and @axis isn't a real handle -- but the handle names a
+           bank, and the person clearly meant it as their UPI ID"
+
+  - text: "send it to kiran@hdfcpay"
+    expect: upi_id
+    note: "unrecognised handle that names a bank, no 'upi' word"
+
+  - text: "send 200 to 9123456780@newbank"
+    expect: upi_id
+    note: "unknown handle and no 'upi' word, but the name is a 10-digit mobile
+           number -- almost nothing else is written that way"
+
+  - text: "pay 100 to meena@axisb"
+    expect: upi_id
+    note: "@axisb is the BHIM Axis Pay handle"
+
+  - text: "shop payments go to kirana.store@okbizaxis"
+    expect: upi_id
+    note: "@okbizaxis is Google Pay for business"
+
   # ─── Phone numbers ───────────────────────────────────────────────────
 
   - text: "call me on +91 98765 43210"

@@ -131,8 +131,8 @@ def looks_like_pan(value: str) -> bool:
 
 #: Handles that UPI apps and banks issue -- the part after the @ in a UPI ID.
 #: Deliberately not exhaustive, because banks keep adding new ones. That is why
-#: the UPI pattern also accepts an unrecognised handle when the word "upi" or
-#: "vpa" is nearby.
+#: `looks_like_upi_id` has other ways to recognise an ID, and why the UPI
+#: pattern also accepts one when the word "upi" or "vpa" is nearby.
 UPI_HANDLES = frozenset(
     {
         # PhonePe
@@ -144,6 +144,7 @@ UPI_HANDLES = frozenset(
         "okhdfcbank",
         "okicici",
         "oksbi",
+        "okbizaxis",
         # Paytm
         "paytm",
         "pthdfc",
@@ -154,6 +155,8 @@ UPI_HANDLES = frozenset(
         "apl",
         # BHIM
         "upi",
+        # BHIM Axis Pay
+        "axisb",
         # Banks' own apps
         "sbi",
         "hdfcbank",
@@ -163,8 +166,28 @@ UPI_HANDLES = frozenset(
     }
 )
 
+#: Bank names that mark a handle as a UPI handle wherever they appear inside it,
+#: even when the handle isn't on the list above. This is what catches
+#: "Celina@AXIS": @axis is not a real handle, but the person plainly meant a
+#: UPI ID. Kept to distinctive names.
+UPI_BANK_NAMES = ("axis", "hdfc", "icici", "kotak", "sbi", "paytm", "idfc", "baroda", "canara")
 
-def has_known_upi_handle(value: str) -> bool:
-    """True when the part after the @ is a handle a UPI app actually issues."""
-    _, _, handle = value.rpartition("@")
-    return handle.lower() in UPI_HANDLES
+
+def looks_like_upi_id(value: str) -> bool:
+    """True when name@handle is recognisably a UPI ID on its own, with no
+    surrounding words needed. Any one of three signs is enough:
+
+      the handle is one a UPI app issues            ravi@ybl
+      the name is a 10-digit Indian mobile number   9123456780@newbank
+      the handle names a bank                       Celina@AXIS
+
+    A server login like admin@localhost shows none of them, and is left alone.
+    """
+    name, _, handle = value.rpartition("@")
+    handle = handle.lower()
+
+    return (
+        handle in UPI_HANDLES
+        or (len(name) == 10 and name.isdigit() and name[0] in "6789")
+        or any(bank in handle for bank in UPI_BANK_NAMES)
+    )

@@ -88,6 +88,10 @@ Built in V2, but the token columns go into the schema from the first migration.
 
 **Masked values are not redacted.** When someone has already hidden the digits themselves — `78966*****@ibl`, `789678****` — what remains can't identify anyone. Redacting it would also strip clues the answer depends on: `@ibl` tells the AI the app is PhonePe.
 
+**A UPI ID hides the name and keeps the handle.** `Celina@AXIS` becomes `[UPI_NAME_1]@AXIS`. The name is personal; the handle only says which bank or app, and it's usually what the answer needs — the AI can only reply "@axis isn't a real handle, did you mean @axisbank?" if it can see @axis.
+
+**A UPI ID is recognised without the word "upi" when any one of three signs is present:** the handle is one a UPI app issues (`ravi@ybl`), the name is a 10-digit mobile number (`9123456780@newbank`), or the handle names a bank (`Celina@AXIS`). Server logins like `admin@localhost` show none of them. The accepted gap is something like `celina@newbank` with no "upi" nearby, which is genuinely indistinguishable from `raj@home`.
+
 **One engine serves every semantic category.** Prompt injection and malware-rephrase detection are the same machinery — take incoming text, compare it semantically against known-bad examples. Same scoring, same thresholds. Only the examples in the config differ. Building injection detection *is* building the rephrase detector; adding malware afterwards is adding a category to a YAML file, not writing code.
 
 **A pipeline, not a single check.** Every check shares one shape, so adding check two or three doesn't force a redesign.

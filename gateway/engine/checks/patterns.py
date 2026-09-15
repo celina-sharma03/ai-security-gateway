@@ -18,7 +18,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from gateway.engine.checks.validators import has_known_upi_handle, looks_like_card, looks_like_pan
+from gateway.engine.checks.validators import looks_like_card, looks_like_pan, looks_like_upi_id
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,8 @@ class Pattern:
     regex: re.Pattern[str]
 
     validator: Callable[[str], bool] | None = None
-    """Run on the matched text. A match that fails is discarded."""
+    """Run on the whole match, even when `group` picks out only part of it.
+    A match that fails is discarded."""
 
     needs_context: re.Pattern[str] | None = None
     """Must appear within `window` characters before the match."""
@@ -38,7 +39,11 @@ class Pattern:
     window: int = 40
 
     group: int = 0
-    """Which capture group holds the value. 0 means the whole match."""
+    """Which capture group gets replaced. 0 means the whole match."""
+
+    placeholder: str = ""
+    """What the placeholder is called, when it should differ from the category.
+    A UPI ID hides only its name, so it reads [UPI_NAME_1]@ybl."""
 
     label: str = ""
     """For debugging, when one category has several patterns."""
@@ -56,8 +61,9 @@ def _c(*words: str) -> re.Pattern[str]:
 
 #: A UPI ID is name@handle. The handle is letters and digits with no dot, and
 #: the lookahead refuses any match followed by ".something" -- that is an email
-#: domain, which belongs to the email pattern.
-_UPI_ID = re.compile(r"\b[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z][A-Za-z0-9]*\b(?!\.[A-Za-z])")
+#: domain, which belongs to the email pattern. The name is captured on its own
+#: because only the name gets hidden; the handle stays visible.
+_UPI_ID = re.compile(r"\b([A-Za-z0-9][A-Za-z0-9._-]*)@[A-Za-z][A-Za-z0-9]*\b(?!\.[A-Za-z])")
 
 
 PATTERNS: tuple[Pattern, ...] = (
@@ -138,20 +144,29 @@ PATTERNS: tuple[Pattern, ...] = (
         label="standard",
     ),
     # --- UPI IDs ---------------------------------------------------------
-    # Two ways a match counts, and either one is enough: the handle is one a
-    # UPI app really issues, or the word "upi" or "vpa" is nearby. Both use the
-    # same shape, so when both match, the overlap step keeps just one.
-    # Anything else with that shape, like admin@localhost, is left alone.
+    # Two ways a match counts, and either one is enough: the ID is recognisable
+    # on its own (a known handle, a mobile-number name, or a bank named in the
+    # handle), or the word "upi" or "vpa" is nearby. Both use the same shape, so
+    # when both match, the overlap step keeps just one. Anything else with that
+    # shape, like admin@localhost, is left alone.
+    #
+    # Only the name is hidden. The handle isn't personal, and it is usually what
+    # the answer needs: "@axis isn't a real handle" can only be said by an AI
+    # that can see @axis.
     Pattern(
         category="upi_id",
         regex=_UPI_ID,
-        validator=has_known_upi_handle,
-        label="upi-known-handle",
+        validator=looks_like_upi_id,
+        group=1,
+        placeholder="UPI_NAME",
+        label="upi-recognisable",
     ),
     Pattern(
         category="upi_id",
         regex=_UPI_ID,
         needs_context=_c("upi", "vpa"),
+        group=1,
+        placeholder="UPI_NAME",
         label="upi-with-context",
     ),
     # --- Phone numbers ---------------------------------------------------
