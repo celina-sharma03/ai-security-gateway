@@ -4,11 +4,12 @@ python -m eval            summary of the set
 python -m eval --tricky   only the cases designed to fool a naive pattern
 python -m eval --all      every case
 python -m eval --score    run the redaction check and report every failure
+python -m eval --holdout  run it on the independently written holdout cases
 """
 
 import sys
 
-from eval.dataset import load_all, load_negative, load_positive, summary
+from eval.dataset import load_all, load_holdout, load_negative, load_positive, summary
 
 
 def _use_utf8_output() -> None:
@@ -52,6 +53,12 @@ def main() -> None:
         from eval.score import report
 
         report()
+        return
+
+    if "--holdout" in args:
+        from eval.score import report
+
+        report(load_holdout(), title="Holdout -- written independently, never tuned against")
         return
 
     if "--tricky" in args:

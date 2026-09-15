@@ -1,4 +1,4 @@
-"""Run the redaction check over the evaluation set and report honestly.
+"""Run the redaction check over an evaluation set and report honestly.
 
 Two numbers matter, and they are not equally important:
 
@@ -54,30 +54,30 @@ class Report:
         return self.missed == 0 and self.false_positives == 0
 
 
-def run() -> Report:
+def run(cases: list[Case] | None = None) -> Report:
+    """Grade the redaction check against `cases`, or the tuned set if none given."""
+    if cases is None:
+        cases = load_positive() + load_negative()
+
     report = Report()
 
-    for case in load_positive():
+    for case in cases:
         result = redaction.check(case.text)
         got = result.categories
 
-        if got & case.expect:
-            report.caught += 1
-        else:
-            report.missed += 1
-            report.misses.append(
-                Failure(
-                    case=case,
-                    got=got,
-                    detail=f"expected {sorted(case.expect)}, got {sorted(got) or 'nothing'}",
+        if case.should_flag:
+            if got & case.expect:
+                report.caught += 1
+            else:
+                report.missed += 1
+                report.misses.append(
+                    Failure(
+                        case=case,
+                        got=got,
+                        detail=f"expected {sorted(case.expect)}, got {sorted(got) or 'nothing'}",
+                    )
                 )
-            )
-
-    for case in load_negative():
-        result = redaction.check(case.text)
-        got = result.categories
-
-        if not got:
+        elif not got:
             report.passed_clean += 1
         else:
             report.false_positives += 1
@@ -108,13 +108,13 @@ def _show(title: str, failures: list[Failure], weight: str) -> None:
         print()
 
 
-def report() -> Report:
-    result = run()
+def report(cases: list[Case] | None = None, title: str = "Redaction check") -> Report:
+    result = run(cases)
 
     total_positive = result.caught + result.missed
     total_negative = result.passed_clean + result.false_positives
 
-    print("Redaction check\n")
+    print(f"{title}\n")
     print(f"  caught         {result.caught:>3} / {total_positive}   ({result.recall:.0%})")
     print(
         f"  passed clean   {result.passed_clean:>3} / {total_negative}   ({result.specificity:.0%})"

@@ -6,7 +6,7 @@ name or a duplicated case would quietly weaken every score Phase 2 produces.
 
 import pytest
 
-from eval.dataset import KNOWN_TYPES, load_all, load_negative, load_positive
+from eval.dataset import KNOWN_TYPES, load_all, load_holdout, load_negative, load_positive
 
 
 def test_both_files_load():
@@ -32,8 +32,9 @@ def test_categories_are_spelled_correctly():
 
 
 def test_every_known_category_has_at_least_one_case():
-    """If a category is worth listing, it's worth testing."""
-    covered = {kind for case in load_positive() for kind in case.expect}
+    """If a category is worth listing, it's worth testing -- in the tuned set
+    or the holdout."""
+    covered = {kind for case in load_positive() + load_holdout() for kind in case.expect}
     missing = KNOWN_TYPES - covered
     assert not missing, f"categories with no test case: {missing}"
 
@@ -74,3 +75,27 @@ def test_positive_case_is_well_formed(case):
 @pytest.mark.parametrize("case", load_negative(), ids=lambda c: repr(c.text[:40]))
 def test_negative_case_is_well_formed(case):
     assert case.expect == frozenset()
+
+
+# --- Holdout -------------------------------------------------------------
+# Graded, never tuned against. These tests only guard that the file is sound.
+# Whether the gateway gets the cases right is measured with
+# `python -m eval --holdout`, not enforced here.
+
+
+def test_holdout_loads():
+    assert load_holdout()
+
+
+def test_holdout_categories_are_spelled_correctly():
+    for case in load_holdout():
+        unknown = case.expect - KNOWN_TYPES
+        assert not unknown, f"unknown category {unknown} in {case.text!r}"
+
+
+def test_holdout_does_not_repeat_the_tuned_set():
+    """A holdout case copied from the tuned set would measure nothing new."""
+    tuned = {" ".join(c.text.split()) for c in load_all()}
+    for case in load_holdout():
+        text = " ".join(case.text.split())
+        assert text not in tuned, f"holdout repeats a tuned case: {case.text!r}"

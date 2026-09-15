@@ -14,6 +14,10 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 POSITIVE_FILE = DATA_DIR / "pii_positive.yaml"
 NEGATIVE_FILE = DATA_DIR / "pii_negative.yaml"
 
+#: Cases written independently of the two files above. Graded, never tuned
+#: against -- that is what makes the score they produce believable.
+HOLDOUT_FILE = DATA_DIR / "holdout.yaml"
+
 #: Every category a positive case is allowed to declare. Anything outside
 #: this set is a typo in the data file, and the tests will say so.
 KNOWN_TYPES = frozenset(
@@ -26,6 +30,7 @@ KNOWN_TYPES = frozenset(
         "aadhaar",
         "pan",
         "ip_address",
+        "upi_id",
     }
 )
 
@@ -84,6 +89,18 @@ def load_negative() -> list[Case]:
 
 def load_all() -> list[Case]:
     return load_positive() + load_negative()
+
+
+def load_holdout() -> list[Case]:
+    """Independently written cases, positives and negatives mixed in one file.
+
+    A case that declares `expect` or `expect_any_of` must be caught; one that
+    declares neither must pass through untouched.
+    """
+    raw = yaml.safe_load(HOLDOUT_FILE.read_text(encoding="utf-8"))
+    return [
+        _parse(case, positive="expect" in case or "expect_any_of" in case) for case in raw["cases"]
+    ]
 
 
 def summary() -> dict[str, int]:

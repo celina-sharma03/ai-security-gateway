@@ -1,0 +1,33 @@
+# Holdout cases, written independently of the tuned evaluation set.
+#
+# These are graded, never tuned against. They were recorded and run before any
+# detection code was changed in response to them, so the score they produce is
+# an honest measurement of messages nobody designed the gateway around.
+#
+# One file, positives and negatives mixed. A case with `expect` must be caught;
+# a case without it must pass through untouched.
+#
+# Typos and odd spacing are kept on purpose. Real messages have them.
+
+cases:
+
+  - text: "My ransaction shows a error code of 81 with my transaction ID as 47366576968999 and RRN as 67900548767098, how can I resolve it"
+    note: "Transaction ID and RRN are references, not personal data. Neither can
+           move money or identify a person without the bank's own systems, and
+           redacting them would break one of the most common support questions
+           there is -- the AI needs the reference to help."
+
+  - text: "My order as 7688 7836 4843 has been delayed and need to track it."
+    note: "an order number"
+
+  - text: "I'm not able to fill the form due to my aadhar card.it's failing, 7234 0089 8765"
+    expect: aadhaar
+
+  - text: "I need to send a mail to an HR and this is my celina.test66@gmail.com"
+    expect: email
+    note: "address is invented"
+
+  - text: "I need to make a payment with my upi id: 7896543234@ybl,please tell me the steps to do it"
+    expect: upi_id
+    note: "UPI IDs are how most payments in India are made, and they often
+           contain the person's mobile number"
