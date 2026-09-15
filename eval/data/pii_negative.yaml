@@ -119,6 +119,24 @@ cases:
     tricky: true
     note: "a pattern that describes an email without being one"
 
+  # ─── UPI-shaped, but not UPI IDs ─────────────────────────────────────
+
+  - text: "ssh into admin@localhost"
+    tricky: true
+    note: "name@word with no dot is exactly a UPI ID's shape, but the handle is
+           unknown and nothing nearby says upi"
+
+  - text: "we accept @ybl and @paytm handles"
+    tricky: true
+    note: "real UPI handles, but no name in front of them"
+
+  - text: "the upi app is down again"
+    note: "mentions UPI, contains no ID"
+
+  - text: "upi payment failed, ref 412345678901"
+    tricky: true
+    note: "a UPI reference number, not an ID -- the same call as the RRN in the holdout"
+
   # ─── A context word hiding inside another word ───────────────────────
   # Context words must match as whole words. Before that was enforced,
   # all three of these were redacted.

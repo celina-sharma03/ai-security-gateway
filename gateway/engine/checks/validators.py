@@ -125,3 +125,46 @@ def looks_like_pan(value: str) -> bool:
     if len(cleaned) != 10:
         return False
     return cleaned[3] in PAN_HOLDER_TYPES
+
+
+# --- UPI -----------------------------------------------------------------
+
+#: Handles that UPI apps and banks issue -- the part after the @ in a UPI ID.
+#: Deliberately not exhaustive, because banks keep adding new ones. That is why
+#: the UPI pattern also accepts an unrecognised handle when the word "upi" or
+#: "vpa" is nearby.
+UPI_HANDLES = frozenset(
+    {
+        # PhonePe
+        "ybl",
+        "ibl",
+        "axl",
+        # Google Pay
+        "okaxis",
+        "okhdfcbank",
+        "okicici",
+        "oksbi",
+        # Paytm
+        "paytm",
+        "pthdfc",
+        "ptsbi",
+        "ptyes",
+        "ptaxis",
+        # Amazon Pay
+        "apl",
+        # BHIM
+        "upi",
+        # Banks' own apps
+        "sbi",
+        "hdfcbank",
+        "icici",
+        "axisbank",
+        "kotak",
+    }
+)
+
+
+def has_known_upi_handle(value: str) -> bool:
+    """True when the part after the @ is a handle a UPI app actually issues."""
+    _, _, handle = value.rpartition("@")
+    return handle.lower() in UPI_HANDLES

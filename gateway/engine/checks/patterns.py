@@ -18,7 +18,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from gateway.engine.checks.validators import looks_like_card, looks_like_pan
+from gateway.engine.checks.validators import has_known_upi_handle, looks_like_card, looks_like_pan
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,12 @@ def _c(*words: str) -> re.Pattern[str]:
     their numbers redacted.
     """
     return re.compile(r"\b(?:" + "|".join(words) + r")\b", re.IGNORECASE)
+
+
+#: A UPI ID is name@handle. The handle is letters and digits with no dot, and
+#: the lookahead refuses any match followed by ".something" -- that is an email
+#: domain, which belongs to the email pattern.
+_UPI_ID = re.compile(r"\b[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z][A-Za-z0-9]*\b(?!\.[A-Za-z])")
 
 
 PATTERNS: tuple[Pattern, ...] = (
@@ -130,6 +136,23 @@ PATTERNS: tuple[Pattern, ...] = (
             r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}\b"
         ),
         label="standard",
+    ),
+    # --- UPI IDs ---------------------------------------------------------
+    # Two ways a match counts, and either one is enough: the handle is one a
+    # UPI app really issues, or the word "upi" or "vpa" is nearby. Both use the
+    # same shape, so when both match, the overlap step keeps just one.
+    # Anything else with that shape, like admin@localhost, is left alone.
+    Pattern(
+        category="upi_id",
+        regex=_UPI_ID,
+        validator=has_known_upi_handle,
+        label="upi-known-handle",
+    ),
+    Pattern(
+        category="upi_id",
+        regex=_UPI_ID,
+        needs_context=_c("upi", "vpa"),
+        label="upi-with-context",
     ),
     # --- Phone numbers ---------------------------------------------------
     # An explicit country code is self-identifying, so it needs no context.

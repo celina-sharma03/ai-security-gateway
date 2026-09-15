@@ -112,6 +112,39 @@ cases:
     expect: email
     note: "two in one message — both must be caught, not just the first"
 
+  # ─── UPI IDs ─────────────────────────────────────────────────────────
+  # name@handle, with no dot in the handle. That missing dot is what
+  # separates a UPI ID from an email. Added after the independent holdout
+  # showed none were being caught.
+
+  - text: "pay me at ravi@ybl"
+    expect: upi_id
+    note: "known handle (PhonePe), no other clue needed"
+
+  - text: "my upi is ravi@newbank"
+    expect: upi_id
+    note: "unrecognised handle, caught only because 'upi' is nearby"
+
+  - text: "vpa: shop.kiran@okhdfcbank"
+    expect: upi_id
+    note: "'vpa' is the official name for a UPI ID, and the name part has a dot"
+
+  - text: "send to RAVI@OKAXIS"
+    expect: upi_id
+    note: "uppercase"
+
+  - text: "upi id 9812345678@ybl, thanks"
+    expect: upi_id
+    note: "a mobile number as the name, with a comma straight after"
+
+  - text: "upi://pay?pa=ravi@ybl&pn=Ravi"
+    expect: upi_id
+    note: "a UPI payment link, the kind encoded inside QR codes"
+
+  - text: "my number and upi: 9812345678@paytm"
+    expect: upi_id
+    note: "the phone pattern also matches the digits; the longer UPI match must win"
+
   # ─── Phone numbers ───────────────────────────────────────────────────
 
   - text: "call me on +91 98765 43210"

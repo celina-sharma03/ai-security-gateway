@@ -186,3 +186,27 @@ def test_common_forms_of_a_context_word_still_count():
     """Whole-word matching must not lose the everyday forms people write."""
     assert redaction.check("calling 9876543210 now").categories == {"phone"}
     assert redaction.check("both numbers are 9876543210 and 9123456789").categories == {"phone"}
+
+
+# --- UPI ----------------------------------------------------------------
+
+
+def test_upi_id_with_known_handle_needs_no_context():
+    assert redaction.check("pay me at ravi@ybl").categories == {"upi_id"}
+
+
+def test_upi_id_with_unknown_handle_needs_context():
+    assert redaction.check("my upi is ravi@newbank").categories == {"upi_id"}
+    assert redaction.check("ssh into admin@localhost").action is Action.ALLOW
+
+
+def test_upi_match_wins_over_the_phone_number_inside_it():
+    """Both patterns match the digits. The longer UPI match is the specific one,
+    and keeping the phone finding would redact only half the ID."""
+    result = redaction.check("my number and upi: 9812345678@paytm")
+    assert result.categories == {"upi_id"}
+    assert result.text == "my number and upi: [UPI_ID_1]"
+
+
+def test_email_is_not_mistaken_for_upi():
+    assert redaction.check("email priya@gmail.com").categories == {"email"}
