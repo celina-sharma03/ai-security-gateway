@@ -82,7 +82,11 @@ Built in V2, but the token columns go into the schema from the first migration.
 
 **Order of work: PII and secrets first, prompt injection second.** Redaction is pattern matching — reliable from day one, and it's the pain people actually have. Injection detection is the hard, uncertain part, built on a foundation that already works. If it disappoints, there's still a real product.
 
-**Redaction starts with rigid patterns** — API keys, credit cards, emails, phone numbers, Aadhaar, PAN. These have distinctive shapes and are caught almost perfectly. Names and addresses look like ordinary words ("Rose", "Reading") and are a genuine research problem.
+**Redaction starts with rigid patterns** — API keys, credit cards, emails, phone numbers, Aadhaar, PAN, UPI IDs. These have distinctive shapes and are caught almost perfectly. Names and addresses look like ordinary words ("Rose", "Reading") and are a genuine research problem.
+
+**Reference numbers are not redacted.** Transaction IDs, RRNs and UPI payment references identify a transaction, not a person — none of them can move money or reveal who someone is without the bank's own systems. And *"my payment failed, here's the reference"* is one of the most common support questions; the AI needs the number to help. Redacting it breaks the question and protects nothing.
+
+**Masked values are not redacted.** When someone has already hidden the digits themselves — `78966*****@ibl`, `789678****` — what remains can't identify anyone. Redacting it would also strip clues the answer depends on: `@ibl` tells the AI the app is PhonePe.
 
 **One engine serves every semantic category.** Prompt injection and malware-rephrase detection are the same machinery — take incoming text, compare it semantically against known-bad examples. Same scoring, same thresholds. Only the examples in the config differ. Building injection detection *is* building the rephrase detector; adding malware afterwards is adding a category to a YAML file, not writing code.
 

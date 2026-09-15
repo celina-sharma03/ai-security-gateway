@@ -9,6 +9,10 @@ A miss is bad. A false positive is worse, because it breaks ordinary work
 and the gateway gets switched off that afternoon. The report below lists
 every failure rather than only the totals, because a percentage with no
 examples behind it is not evidence.
+
+A case that must be caught only counts as correct when the gateway caught
+what it should *and nothing more*. Catching a UPI ID while also redacting the
+payment reference beside it is still a failure.
 """
 
 from dataclasses import dataclass
@@ -28,6 +32,7 @@ class Failure:
 class Report:
     caught: int = 0
     missed: int = 0
+    over_redacted: int = 0
     passed_clean: int = 0
     false_positives: int = 0
 
@@ -40,7 +45,7 @@ class Report:
 
     @property
     def recall(self) -> float:
-        total = self.caught + self.missed
+        total = self.caught + self.missed + self.over_redacted
         return self.caught / total if total else 0.0
 
     @property
@@ -51,7 +56,7 @@ class Report:
 
     @property
     def clean(self) -> bool:
-        return self.missed == 0 and self.false_positives == 0
+        return self.missed == 0 and self.over_redacted == 0 and self.false_positives == 0
 
 
 def run(cases: list[Case] | None = None) -> Report:
@@ -66,9 +71,10 @@ def run(cases: list[Case] | None = None) -> Report:
         got = result.categories
 
         if case.should_flag:
-            if got & case.expect:
-                report.caught += 1
-            else:
+            wanted = got & case.expect
+            extra = got - case.expect
+
+            if not wanted:
                 report.missed += 1
                 report.misses.append(
                     Failure(
@@ -77,6 +83,20 @@ def run(cases: list[Case] | None = None) -> Report:
                         detail=f"expected {sorted(case.expect)}, got {sorted(got) or 'nothing'}",
                     )
                 )
+            elif extra:
+                report.over_redacted += 1
+                report.false_alarms.append(
+                    Failure(
+                        case=case,
+                        got=got,
+                        detail=(
+                            f"caught {sorted(wanted)}, but also redacted "
+                            f"{sorted(extra)} -- {result.text}"
+                        ),
+                    )
+                )
+            else:
+                report.caught += 1
         elif not got:
             report.passed_clean += 1
         else:
@@ -111,7 +131,7 @@ def _show(title: str, failures: list[Failure], weight: str) -> None:
 def report(cases: list[Case] | None = None, title: str = "Redaction check") -> Report:
     result = run(cases)
 
-    total_positive = result.caught + result.missed
+    total_positive = result.caught + result.missed + result.over_redacted
     total_negative = result.passed_clean + result.false_positives
 
     print(f"{title}\n")

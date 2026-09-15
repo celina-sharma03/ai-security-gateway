@@ -31,3 +31,26 @@ cases:
     expect: upi_id
     note: "UPI IDs are how most payments in India are made, and they often
            contain the person's mobile number"
+
+  # ─── Batch 2: UPI ─────────────────────────────────────────────────────
+  # Written after UPI detection was built. Masked values are deliberately not
+  # caught: the person has already hidden what matters, and what is left
+  # can't identify anyone.
+
+  - text: "my transaction with this UPI ID: 6789445390@ybl is failing,what can be the cause?"
+    expect: upi_id
+
+  - text: "what can be the steps to pay someone on their UPI ID with 78966*****@ibl"
+    note: "masked by the person. The @ibl tells the AI the app is PhonePe, which
+           it needs to explain the steps, and redacting it would protect nothing."
+
+  - text: "how can i search for my upi id on specific UPI payment app my number is this 789678**** and my bank is sbi"
+    note: "masked phone number, already hidden by the person"
+
+  - text: "is this upi is valid CELINA@AXIS"
+    expect: upi_id
+
+  - text: "Could it be a network issue if y upi is failing or any ither cause, as upi payment failed with upi 3456789@ixl and ref is 9876543765"
+    expect: upi_id
+    note: "two things at once: the UPI ID must be caught, and the ref must be left
+           alone -- it is a reference number, the same call as the RRN in batch 1"
