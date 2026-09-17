@@ -188,6 +188,28 @@ def test_common_forms_of_a_context_word_still_count():
     assert redaction.check("both numbers are 9876543210 and 9123456789").categories == {"phone"}
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "he called from 9876543210 yesterday",
+        "contacted on 9876543210 about the refund",
+        "reached him on 9876543210",
+        "callback to 9876543210 please",
+    ],
+)
+def test_the_endings_people_actually_write_still_count(text):
+    """Whole words are right, but "called" is not "call". The context words
+    carry any ending, so the everyday forms count."""
+    assert redaction.check(text).categories == {"phone"}
+
+
+def test_a_context_word_still_cannot_hide_inside_another_word():
+    """The Phase 2 bug: "reach" inside "breach". Allowing endings must never
+    start allowing beginnings."""
+    result = redaction.check("after the data breach 9876543210 records leaked")
+    assert result.action is Action.ALLOW
+
+
 # --- UPI ----------------------------------------------------------------
 
 

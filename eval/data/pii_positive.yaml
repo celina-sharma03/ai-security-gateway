@@ -189,6 +189,15 @@ cases:
     expect: phone
     note: "leading zero, as often written in India"
 
+  - text: "he called from 9876543210 yesterday"
+    expect: phone
+    note: "'called', not 'call'. Whole-word matching missed this until the
+           context words were allowed to carry the endings people write."
+
+  - text: "contacted on 9876543210 about the refund"
+    expect: phone
+    note: "'contacted', not 'contact'"
+
   # ─── Aadhaar ─────────────────────────────────────────────────────────
   # Synthetic. Real Aadhaar numbers carry a Verhoeff checksum; whether to
   # validate it is a Phase 2 decision, same question as Luhn for cards.
