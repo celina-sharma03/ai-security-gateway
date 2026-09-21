@@ -161,6 +161,23 @@ cases:
     tricky: true
     note: "mobile-shaped, and 'reach' hides inside 'breach'"
 
+  # ─── Close to a context word, but not one ────────────────────────────
+  # Guards on the everyday spellings added to the positive set. Each of these
+  # must still pass untouched.
+
+  - text: "invoice no 9876543210 is overdue"
+    tricky: true
+    note: "'no' is deliberately not a phone word -- it would redact every
+           invoice, order and ref number, which are left alone by decision"
+
+  - text: "check the control panel ABCPE1234F"
+    tricky: true
+    note: "a valid PAN shape, but 'panel' is not 'pan'"
+
+  - text: "the mobility grant ref 9876543210"
+    tricky: true
+    note: "'mob' counts as a phone word, but 'mobility' does not"
+
   # ─── Talks about secrets without containing any ──────────────────────
   # The equivalent of asking how antivirus works without writing a virus.
 

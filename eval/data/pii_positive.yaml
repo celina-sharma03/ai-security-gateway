@@ -167,6 +167,46 @@ cases:
     expect: upi_id
     note: "@okbizaxis is Google Pay for business"
 
+  # ─── Everyday spellings of the words detection relies on ─────────────
+  # Phone, Aadhaar, PAN, and UPI IDs with an unknown handle all need a nearby
+  # word. These are the ways people actually write those words.
+
+  - text: "adhaar card no is 3456 7890 1234"
+    expect: aadhaar
+    note: "'adhaar' -- one of the most common spellings in India"
+
+  - text: "adhar 4567 8901 2345"
+    expect: aadhaar
+    note: "'adhar'"
+
+  - text: "mob: 9876543210"
+    expect: phone
+    note: "'mob', short for mobile"
+
+  - text: "mob no 9123456780"
+    expect: phone
+
+  - text: "watsapp 9876543210 anytime"
+    expect: phone
+    note: "'watsapp' -- a common spelling of WhatsApp"
+
+  - text: "whatsap me on 9123456780"
+    expect: phone
+
+  - text: "pancard ABCPE1234F"
+    expect: pan
+    note: "'pancard' written as one word"
+
+  - text: "phonepe id ravi@newbank"
+    expect: upi_id
+    note: "unknown handle, but the payment app is named"
+
+  - text: "gpay id kiran@newbank"
+    expect: upi_id
+
+  - text: "google pay: meena@newbank"
+    expect: upi_id
+
   # ─── Phone numbers ───────────────────────────────────────────────────
 
   - text: "call me on +91 98765 43210"

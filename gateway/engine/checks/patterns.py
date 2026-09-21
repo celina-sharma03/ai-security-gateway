@@ -164,7 +164,8 @@ PATTERNS: tuple[Pattern, ...] = (
     Pattern(
         category="upi_id",
         regex=_UPI_ID,
-        needs_context=_c("upi", "vpa"),
+        # People name the app as often as they say "upi".
+        needs_context=_c("upi", "vpa", "phonepe", "gpay", r"google\s?pay", "paytm", "bhim"),
         group=1,
         placeholder="UPI_NAME",
         label="upi-with-context",
@@ -187,10 +188,14 @@ PATTERNS: tuple[Pattern, ...] = (
         # "reach" still can't match inside "breach".
         needs_context=_c(
             r"phone\w*",
+            # "mob" exactly: its other words, like mobility and mobster, say
+            # nothing about a phone.
+            "mob",
             r"mobile\w*",
             r"number\w*",
             r"call\w*",
-            r"whatsapp",
+            # whatsapp, watsapp, whatsap -- the spellings people actually use.
+            r"wh?ats?ap\w*",
             r"contact\w*",
             r"reach\w*",
             r"cell\w*",
@@ -203,7 +208,8 @@ PATTERNS: tuple[Pattern, ...] = (
     Pattern(
         category="aadhaar",
         regex=re.compile(r"\b\d{4}\s?\d{4}\s?\d{4}\b"),
-        needs_context=_c("aadhaar", "aadhar", "uidai", "uid"),
+        # aadhaar, aadhar, adhaar, adhar -- all common, so both stems count.
+        needs_context=_c(r"aadha\w*", r"adha\w*", "uidai", "uid"),
         label="with-context",
     ),
     # --- PAN -------------------------------------------------------------
@@ -216,7 +222,9 @@ PATTERNS: tuple[Pattern, ...] = (
         category="pan",
         regex=re.compile(r"\b[A-Za-z]{5}\d{4}[A-Za-z]\b"),
         validator=looks_like_pan,
-        needs_context=_c("pan", "permanent account"),
+        # "pancard" spelled out, never a "pan" stem: that would let in panel,
+        # panic and panda.
+        needs_context=_c("pan", "pancard", "permanent account"),
         label="structural-with-context",
     ),
     # --- IP addresses ----------------------------------------------------

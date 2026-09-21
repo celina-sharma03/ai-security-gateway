@@ -210,6 +210,14 @@ def test_a_context_word_still_cannot_hide_inside_another_word():
     assert result.action is Action.ALLOW
 
 
+def test_mob_counts_but_other_mob_words_do_not():
+    """The word "mob" is how many people write mobile. Mobility, mobster and
+    mobilise say nothing about a phone, so they don't count. The crowd meaning
+    of "mob" can't be told apart from the phone one; that trade is accepted."""
+    assert redaction.check("mob: 9876543210").categories == {"phone"}
+    assert redaction.check("the mobility grant ref 9876543210").action is Action.ALLOW
+
+
 # --- UPI ----------------------------------------------------------------
 
 
