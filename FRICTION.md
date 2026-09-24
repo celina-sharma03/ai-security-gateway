@@ -79,3 +79,14 @@ it that way.
 
 Anyone adding a setting that takes words must remember this. Quoting the value
 (`phone: "off"`) also avoids it, but no operator should have to know that.
+
+**A flag that silently answered a different question.** `python -m eval --holdout
+--score` printed the main set's score, because `--score` was checked first and
+returned before `--holdout` was ever read. The command looked like it passed;
+the numbers were from the set the detection was tuned against. The only tell was
+the title line above them.
+
+This is the worst shape a bug can take in an evaluation tool — a wrong answer
+that looks like a right one, on the one set that exists to be untuned. Flags that
+answer different questions (*what to do* versus *which cases to do it on*) have to
+be read together, not as a chain of early returns.

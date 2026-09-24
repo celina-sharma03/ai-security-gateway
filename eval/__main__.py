@@ -4,7 +4,7 @@ python -m eval            summary of the set
 python -m eval --tricky   only the cases designed to fool a naive pattern
 python -m eval --all      every case
 python -m eval --score    run the redaction check and report every failure
-python -m eval --holdout  run it on the independently written holdout cases
+python -m eval --holdout  score the independently written holdout cases instead
 """
 
 import sys
@@ -38,16 +38,18 @@ def main() -> None:
     use_utf8_output()
     args = set(sys.argv[1:])
 
-    if "--score" in args:
+    if "--score" in args or "--holdout" in args:
         from eval.score import report
 
-        report()
-        return
-
-    if "--holdout" in args:
-        from eval.score import report
-
-        report(load_holdout(), title="Holdout -- written independently, never tuned against")
+        # The two flags answer different questions -- --score is what to do,
+        # --holdout is which cases to do it on -- so they have to be read
+        # together. Checking --score first and returning meant that asking for
+        # the holdout alongside it scored the tuned set instead, which is the
+        # one thing the holdout exists to avoid.
+        if "--holdout" in args:
+            report(load_holdout(), title="Holdout -- written independently, never tuned against")
+        else:
+            report()
         return
 
     if "--tricky" in args:
