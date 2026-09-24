@@ -11,7 +11,7 @@
 
 cases:
 
-  - text: "My ransaction shows a error code of 81 with my transaction ID as 47366576968999 and RRN as 67900548767098, how can I resolve it"
+  - text: "My transaction shows a error code of 81 with my transaction ID as 47366576968999 and RRN as 67900548767098, how can I resolve it"
     note: "Transaction ID and RRN are references, not personal data. Neither can
            move money or identify a person without the bank's own systems, and
            redacting them would break one of the most common support questions
@@ -50,7 +50,7 @@ cases:
   - text: "is this upi is valid CELINA@AXIS"
     expect: upi_id
 
-  - text: "Could it be a network issue if y upi is failing or any ither cause, as upi payment failed with upi 3456789@ixl and ref is 9876543765"
+  - text: "Could it be a network issue if my upi is failing or any other cause, as upi payment failed with upi 3456789@ixl and ref is 9876543765"
     expect: upi_id
     note: "two things at once: the UPI ID must be caught, and the ref must be left
            alone -- it is a reference number, the same call as the RRN in batch 1"
