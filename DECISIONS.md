@@ -290,7 +290,9 @@ The `/check` endpoint is half a day's work and is the best demo the project will
 
 **Semantic checks get a two-way data split.** One set to tune against, one locked away untouched until the end. Only the untouched score is believable. Tuning against the same cases you grade against is marking your own exam, and the resulting number means nothing. This applies to anything with a threshold — it does *not* apply to regex, where a pattern either matches or it doesn't and ordinary tests are enough.
 
-**Keep a running friction-notes file** throughout the build. Every setup problem written down the moment it happens — by the end everything works on your machine and you'll have forgotten what was hard. Those notes become the documentation.
+**Keep a running friction-notes file** throughout the build. Every setup problem written down the moment it happens, and every bug worth understanding: what broke, why the obvious version of the code was wrong, how it was found, what fixed it, and what it taught. By the end everything works on your machine and you'll have forgotten what was hard.
+
+Those notes do two jobs. They become the documentation — the difference between setup instructions that work for a stranger and ones that only work here. And they are what makes the project explainable long after it's built: add your own explanation of each bug, in your own words, alongside the detailed entry.
 
 **Setup and documentation get their own phase**, with real days attached. For a developer, bad setup instructions kill a good product. They don't file a bug — they close the tab.
 
