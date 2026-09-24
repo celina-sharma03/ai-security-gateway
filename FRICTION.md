@@ -133,6 +133,26 @@ The discipline that came out of it, and which holds for the rest of the build:
 keep writing cases the detection has never seen, and count over-redaction as a
 failure, not a curiosity.
 
+The plan had said this wasn't necessary here. DECISIONS.md argued that regex
+needs no holdout, because a pattern either matches or it doesn't and there is no
+score to fool yourself with. The reasoning was right and the conclusion was
+wrong: the risk with regex isn't a flattering score, it's a **blind spot** — and
+a blind spot is invisible from the inside by definition. The doc has been
+corrected, and closing a phase with freshly written cases is now a working
+practice rather than a lucky habit.
+
+**A decision written down twice still didn't happen.** DECISIONS.md said the
+patterns would be measured against Microsoft Presidio — once in the tech-stack
+section, once in the Phase 2 plan. Phase 2 closed without it. Nothing was
+decided and nothing was dropped: the phase's exit criteria said "every synthetic
+case caught, and nothing in the negative set falsely flagged", those were met,
+and the comparison was never looked at again. It surfaced later, only by reading
+DECISIONS.md and these notes side by side.
+
+The lesson: a plan is enforced only where it is *checked*. Intentions written in
+the prose above a phase are not checked by anything. If something matters, it
+belongs in that phase's exit criteria, where the phase cannot close without it.
+
 ## Phase 3
 
 **`max()` returned the weaker action.** The pipeline takes the strongest action

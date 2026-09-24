@@ -249,7 +249,7 @@ Each exits on something you can demonstrate, not a feeling of doneness.
 **0 — Setup.** Folder skeleton, virtual environment, dependencies, git, Docker.
 *Exit: the project runs and prints something.*
 
-**1 — Test data.** Synthetic PII and secrets — cards, keys, emails, phones, Aadhaar, PAN — plus realistic cases that must *not* be caught. Ordinary tests, not a tune/holdout harness: a regex either matches or it doesn't, so there's no score to fool yourself with. Real PII can't be published, so this is generated rather than downloaded.
+**1 — Test data.** Synthetic PII and secrets — cards, keys, emails, phones, Aadhaar, PAN — plus realistic cases that must *not* be caught. Ordinary tests rather than a tune/holdout split: a regex either matches or it doesn't, so there is no threshold to tune. The set still has to keep growing with cases written *without looking at the patterns* — see the working practice below, which Phase 2 proved the hard way. Real PII can't be published, so this is generated rather than downloaded.
 *Exit: a test suite that fails loudly when a pattern is wrong.*
 
 **2 — Redaction engine.** Rigid patterns. Regex measured against Presidio.
@@ -288,7 +288,9 @@ The `/check` endpoint is half a day's work and is the best demo the project will
 
 ## Working practices
 
-**Semantic checks get a two-way data split.** One set to tune against, one locked away untouched until the end. Only the untouched score is believable. Tuning against the same cases you grade against is marking your own exam, and the resulting number means nothing. This applies to anything with a threshold — it does *not* apply to regex, where a pattern either matches or it doesn't and ordinary tests are enough.
+**Semantic checks get a two-way data split.** One set to tune against, one locked away untouched until the end. Only the untouched score is believable. Tuning against the same cases you grade against is marking your own exam, and the resulting number means nothing. This applies to anything with a threshold. Regex doesn't need the *split*, because there is no threshold to tune — but it needs the other half of the idea just as much, and this was learned the hard way.
+
+**Every phase closes with cases written without looking at the patterns.** The danger with regex is not a score that flatters you; it is a blind spot. You can only write a test for something you have thought of, so a set written alongside the code can confirm it still does what you already knew, and nothing more. Ten independently written cases at the end of Phase 2 found that UPI IDs had no pattern at all — not a weak one, none — which 110 cases written next to the code could never have shown. Over-redaction counts as a failure in that grading, not a curiosity.
 
 **Keep a running friction-notes file** throughout the build. Every setup problem written down the moment it happens, and every bug worth understanding: what broke, why the obvious version of the code was wrong, how it was found, what fixed it, and what it taught. By the end everything works on your machine and you'll have forgotten what was hard.
 
