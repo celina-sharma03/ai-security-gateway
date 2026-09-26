@@ -174,7 +174,7 @@ The complete list. Nothing is cut — things get added as they're genuinely need
 
 ## Detection layer
 **`re`** (standard library) — rigid patterns: cards, emails, phones, API keys, Aadhaar, PAN.
-**Microsoft Presidio** — richer PII detection including names, and checksum validation on card numbers. Measured against plain regex rather than assumed better.
+**Microsoft Presidio** — richer PII detection including names. Measured after Phase 3 rather than assumed better, and **not adopted for V1**: on our categories it scores 20/61 against 61/61, has no recognizer at all for API keys, passwords or UPI IDs, and out of the box flags `invoice 9876543210 is still unpaid` as a UK NHS number at confidence 1.0. Full numbers and reasoning in `docs/presidio-comparison.md`. Revisit in V2 for **names only**, behind a rules-file switch and with the irrelevant recognizers disabled — names are the one thing patterns genuinely cannot do.
 **sentence-transformers** with **all-MiniLM-L6-v2** — semantic detection. Runs locally after a one-time ~80MB download.
 
 ## Data layer
@@ -252,8 +252,8 @@ Each exits on something you can demonstrate, not a feeling of doneness.
 **1 — Test data.** Synthetic PII and secrets — cards, keys, emails, phones, Aadhaar, PAN — plus realistic cases that must *not* be caught. Ordinary tests rather than a tune/holdout split: a regex either matches or it doesn't, so there is no threshold to tune. The set still has to keep growing with cases written *without looking at the patterns* — see the working practice below, which Phase 2 proved the hard way. Real PII can't be published, so this is generated rather than downloaded.
 *Exit: a test suite that fails loudly when a pattern is wrong.*
 
-**2 — Redaction engine.** Rigid patterns. Regex measured against Presidio.
-*Exit: every synthetic case caught, and nothing in the negative set falsely flagged.*
+**2 — Redaction engine.** Rigid patterns. Regex measured against Presidio — run late, after Phase 3, because the exit criteria below never mentioned it and nothing checked. Written up in `docs/presidio-comparison.md`.
+*Exit: every synthetic case caught, nothing in the negative set falsely flagged, and the Presidio comparison written down.*
 
 **3 — Pipeline and config.** Shared result shape, the runner, `rules.yaml` with named categories.
 *Exit: redaction runs through the pipeline, reading rules from config.*
@@ -295,6 +295,8 @@ The `/check` endpoint is half a day's work and is the best demo the project will
 **Keep a running friction-notes file** throughout the build. Every setup problem written down the moment it happens, and every bug worth understanding: what broke, why the obvious version of the code was wrong, how it was found, what fixed it, and what it taught. By the end everything works on your machine and you'll have forgotten what was hard.
 
 Those notes do two jobs. They become the documentation — the difference between setup instructions that work for a stranger and ones that only work here. And they are what makes the project explainable long after it's built: add your own explanation of each bug, in your own words, alongside the detailed entry.
+
+**Anything that must happen goes in a phase's exit criteria**, not in the prose above them. Prose is checked by nobody. The Presidio comparison was promised twice in this file and Phase 2 still closed without it, because the exit criteria listed only the test results — which passed.
 
 **Setup and documentation get their own phase**, with real days attached. For a developer, bad setup instructions kill a good product. They don't file a bug — they close the tab.
 

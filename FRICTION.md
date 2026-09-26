@@ -157,6 +157,41 @@ The lesson: a plan is enforced only where it is *checked*. Intentions written in
 the prose above a phase are not checked by anything. If something matters, it
 belongs in that phase's exit criteria, where the phase cannot close without it.
 
+**The comparison, once it was finally run, was worth every minute.** Written up
+in full in `docs/presidio-comparison.md`; the parts that changed how I think
+about this project are these.
+
+Presidio missed exactly two of our nine card cases: a Mastercard 2-series number
+and a RuPay number. Those are the *same two* our own first prefix rule rejected,
+for the same reason — a list of card prefixes written before 2017 and without
+India in it. We found that bug in Phase 2 against our own test data. Microsoft's
+library still has it. A widely used library is not a specification.
+
+It scored 0/4 on Aadhaar even with the Indian recognizer loaded, and **it was
+right to**. That recognizer validates the Verhoeff checksum, and our Aadhaar
+numbers are invented, so they fail it — confirmed directly with our own
+`passes_verhoeff()`, which returns False for all of them. Presidio didn't miss
+them; it refused to believe them. Which is exactly why our own Verhoeff
+validator is written and switched off.
+
+It flagged `+1 (555) 123-4567` as nothing at all, and that is also correct: 555
+numbers are reserved for fiction, and Presidio validates against the real
+numbering plan. We match on shape, so we catch it. Two defensible answers to the
+same input, from two different definitions of the job.
+
+And the finding that matters most for a gateway: out of the box, Presidio flags
+`invoice 9876543210 is still unpaid` as a **UK NHS number at confidence 1.0** —
+higher confidence than most of its correct answers. A UK NHS number is ten
+digits with a checksum, and Indian mobile and invoice numbers satisfy it by
+accident. Four of our must-pass cases go that way. Deployed in India without
+someone knowing to switch that recognizer off, it would redact invoice numbers
+on day one.
+
+The lesson, and it applies far beyond Presidio: **detecting more is not the same
+as being right more often.** Every extra category a detector carries is another
+way to redact somebody's invoice number. Ours has nine categories because those
+are the nine we can defend.
+
 ## Phase 3
 
 **`max()` returned the weaker action.** The pipeline takes the strongest action
