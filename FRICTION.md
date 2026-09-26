@@ -14,9 +14,9 @@ to be read back cold, months later, and explained out loud to someone else — w
 the bug was, why the obvious version of the code was wrong, and how it was proved
 rather than guessed.
 
-Each bug ends with an **In my words** line: the same thing explained in my own
-words, once I understood it. That line is the one that proves I did, so nobody
-edits it but me.
+Where an entry carries an **In my words** line, that is the same thing explained
+in my own words once I understood it — the line that proves I did. Those lines
+are mine, and nobody edits them but me.
 
 Nothing is left out for being embarrassing. The wrong turns are the entries worth
 the most: a bug that was merely fixed teaches nothing, a bug that was *understood*
@@ -64,8 +64,6 @@ the test correctly failed. Fixed the data.
 Worth remembering: when a check fails a case, the case might be the thing that's
 wrong. Verify the expected answer before changing the code to produce it.
 
-**In my words** —
-
 **The card prefix rule rejected real cards.** Luhn alone isn't enough — ordinary
 reference numbers pass it by chance — so a card must also *start* like a card.
 The first version of that rule assumed cards begin with 3, 4, 5 or 6. It rejected
@@ -81,8 +79,6 @@ of the range, both valid by Luhn, so only the range keeps them out. See
 
 The lesson: a rule copied from memory is frozen at the date you learned it. Check
 the real range, and test the edges of it, because the middle always passes.
-
-**In my words** —
 
 **Context words were matching inside other words.** Three ordinary sentences were
 being redacted:
@@ -100,8 +96,6 @@ The lesson: this kind of false positive is invisible to a test suite that only
 checks what gets *caught*. It appears only if you deliberately write sentences
 that must be left alone — which is why the negative file is the more important
 of the two.
-
-**In my words** —
 
 **Aadhaar checksum validation is written but not switched on.** Real Aadhaar
 numbers satisfy a Verhoeff checksum, and `passes_verhoeff()` implements it.
@@ -151,8 +145,6 @@ a blind spot is invisible from the inside by definition. The doc has been
 corrected, and closing a phase with freshly written cases is now a working
 practice rather than a lucky habit.
 
-**In my words** —
-
 **A decision written down twice still didn't happen.** DECISIONS.md said the
 patterns would be measured against Microsoft Presidio — once in the tech-stack
 section, once in the Phase 2 plan. Phase 2 closed without it. Nothing was
@@ -186,8 +178,6 @@ The lesson: subclassing `str` means every comparison you *don't* define silently
 means something else. A half-implemented protocol is worse than none, because it
 fails quietly, and it fails in the direction of doing less.
 
-**In my words** —
-
 **YAML reads a bare `off` as the boolean false.** `phone: off` in rules.yaml arrives
 in Python as `phone: False`, not the word "off" — and `no`, `yes` and `on` are
 turned into booleans the same way. Left alone, the most natural thing an operator
@@ -197,8 +187,6 @@ it that way.
 
 Anyone adding a setting that takes words must remember this. Quoting the value
 (`phone: "off"`) also avoids it, but no operator should have to know that.
-
-**In my words** —
 
 **Whole words fixed one bug and introduced another.** Once context words had to
 match as whole words, "he called from 9876543210 yesterday" stopped being caught:
@@ -222,8 +210,6 @@ so a misspelled word means no match and the text passes through untouched. Faili
 towards "do nothing" is the right direction for something sitting in the middle of
 everyone's traffic.
 
-**In my words** —
-
 **A flag that silently answered a different question.** `python -m eval --holdout
 --score` printed the main set's score, because `--score` was checked first and
 returned before `--holdout` was ever read. The command looked like it passed;
@@ -234,8 +220,6 @@ This is the worst shape a bug can take in an evaluation tool — a wrong answer
 that looks like a right one, on the one set that exists to be untuned. Flags that
 answer different questions (*what to do* versus *which cases to do it on*) have to
 be read together, not as a chain of early returns.
-
-**In my words** —
 
 ## Before the first push
 
@@ -251,8 +235,6 @@ keeping the prefix and length the patterns match on, so detection is unchanged.
 AWS's two values stayed: they are Amazon's own published examples and already
 say EXAMPLE. So did the JWT, whose payload decodes to `{"sub":"1"}`, and the PEM
 line, which is a header with no key after it.
-
-**In my words** —
 
 **Three fixes had to happen in the history, not just in the files.** Editing a
 file today does not change what old commits show, and both people and scanners
@@ -272,5 +254,3 @@ over what other people have already pulled.
 The lesson: **git history is published data.** A commit is not a draft. The
 moment to decide what belongs in it is before a remote exists — which, for this
 repo, was the afternoon of the first push.
-
-**In my words** —
