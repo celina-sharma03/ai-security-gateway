@@ -1,6 +1,7 @@
-"""`python -m gateway check`: the pipeline from the command line."""
+"""`python -m gateway`: the pipeline and the server from the command line."""
 
 from gateway.__main__ import main
+from gateway.settings import settings
 
 CARD = "my card is 4111 1111 1111 1111"
 
@@ -35,3 +36,51 @@ def test_a_broken_rules_file_stops_with_a_clear_message(tmp_path, capsys):
 
     assert main(["check", CARD, "--rules", str(rules)]) == 2
     assert "phnoe" in capsys.readouterr().err
+
+
+# --- `python -m gateway serve` ------------------------------------------
+# uvicorn.run blocks forever, so these replace it and check what it was
+# asked to do. Starting a real server in a test would hang the suite.
+
+
+def _fake_uvicorn(monkeypatch) -> dict:
+    captured: dict = {}
+
+    def run(app, **kwargs):
+        captured["app"] = app
+        captured.update(kwargs)
+
+    monkeypatch.setattr("uvicorn.run", run)
+    return captured
+
+
+def test_serve_listens_where_the_settings_say(monkeypatch):
+    captured = _fake_uvicorn(monkeypatch)
+
+    assert main(["serve"]) == 0
+
+    assert captured["app"] == "gateway.proxy.app:app"
+    assert captured["host"] == settings.host
+    assert captured["port"] == settings.port
+    assert captured["reload"] is False
+
+
+def test_serve_flags_win_over_the_settings(monkeypatch):
+    captured = _fake_uvicorn(monkeypatch)
+
+    assert main(["serve", "--host", "0.0.0.0", "--port", "9000", "--reload"]) == 0
+
+    assert captured["host"] == "0.0.0.0"
+    assert captured["port"] == 9000
+    assert captured["reload"] is True
+
+
+def test_serve_says_where_it_will_be_before_starting(monkeypatch, capsys):
+    """Printed before uvicorn takes over the terminal, or nobody ever sees it."""
+    _fake_uvicorn(monkeypatch)
+
+    main(["serve", "--port", "9000"])
+
+    out = capsys.readouterr().out
+    assert "http://127.0.0.1:9000/v1" in out
+    assert settings.upstream_base_url in out

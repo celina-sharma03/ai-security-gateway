@@ -62,3 +62,22 @@ def test_empty_text_is_rejected():
     """Pydantic's min_length, enforced by FastAPI before our code runs. 422 is
     the standard answer for a body that didn't validate."""
     assert client.post("/check", json={"text": ""}).status_code == 422
+
+
+def test_the_root_says_what_this_is_and_where_to_go():
+    """It used to be a 404, which looks like a broken deployment rather than a
+    working one."""
+    response = client.get("/")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["name"] == "AI Security Gateway"
+    assert "/v1/chat/completions" in body["endpoints"]
+    assert "/check" in body["endpoints"]
+
+
+def test_the_root_does_not_advertise_the_mode():
+    """/health reports the mode because deployment tooling needs it. The root
+    does not, because in V1 neither endpoint has any authentication and an
+    unauthenticated caller does not need to know whether enforcement is on."""
+    assert "mode" not in client.get("/").json()

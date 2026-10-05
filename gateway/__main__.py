@@ -2,13 +2,26 @@
 
 python -m gateway                      show the configuration it loaded
 python -m gateway check "some text"    run the pipeline and show what it did
+python -m gateway serve                run the proxy
 
 Options for `check`:
 
 --mode shadow|enforce   use this mode for one run, instead of GATEWAY_MODE
 --rules PATH            use a different rules file
 
-Phase 4 turns the bare command into the server.
+Options for `serve`:
+
+--host / --port         override where it listens, instead of GATEWAY_HOST/PORT
+--reload                restart on file changes. Development only.
+
+`serve` deliberately has no --mode or --rules. Those are read from the
+environment, and a flag would only half-work: with --reload, uvicorn starts a
+child process which re-reads the environment, while without it the app is
+imported into this process where the settings have already been built. A flag
+whose behaviour depends on another flag is worse than no flag.
+
+    $env:GATEWAY_MODE = "enforce"
+    python -m gateway serve
 """
 
 import argparse
@@ -37,9 +50,16 @@ def main(argv: list[str] | None = None) -> int:
         print(exc, file=sys.stderr)
         return 2
 
+    # Note what has already happened by this point: the rules file was loaded
+    # and validated above, before any command runs. So `serve` with a broken
+    # rules file prints the explanation and stops, rather than starting a
+    # server that dies on import with a traceback.
+
     if args.command == "check":
         mode = Mode(args.mode) if args.mode else settings.mode
         _show_check(build_pipeline(mode, rules).run(args.text))
+    elif args.command == "serve":
+        _serve(args.host or settings.host, args.port or settings.port, reload=args.reload)
     else:
         _show_config(rules_file, rules)
 
@@ -51,6 +71,8 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     parser.set_defaults(command=None, rules=None, mode=None)
     commands = parser.add_subparsers(dest="command")
 
+    parser.set_defaults(host=None, port=None, reload=False)
+
     check = commands.add_parser("check", help="run the pipeline on some text")
     check.add_argument("text", help="the text to check, in quotes")
     check.add_argument(
@@ -58,7 +80,39 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     )
     check.add_argument("--rules", type=Path, help="a rules file to use instead of the default")
 
+    serve = commands.add_parser("serve", help="run the proxy")
+    serve.add_argument("--host", help=f"default {settings.host}, or GATEWAY_HOST")
+    serve.add_argument("--port", type=int, help=f"default {settings.port}, or GATEWAY_PORT")
+    serve.add_argument(
+        "--reload", action="store_true", help="restart on file changes (development only)"
+    )
+
     return parser.parse_args(argv)
+
+
+def _serve(host: str, port: int, *, reload: bool) -> None:
+    """Start the server, having said where it will be.
+
+    uvicorn is imported here rather than at the top of the file so that
+    `python -m gateway check` stays a fast command that doesn't drag a web
+    server into memory to look at a line of text.
+
+    The app is passed as an import string rather than the object, because
+    --reload needs to re-import it in a fresh child process.
+    """
+    import uvicorn
+
+    print(f"AI Security Gateway {__version__}")
+    print(f"  mode:      {settings.mode.value}")
+    print(f"  rules:     {settings.rules_file}")
+    print(f"  upstream:  {settings.upstream_base_url}")
+    print()
+    print(f"  listening on  http://{host}:{port}")
+    print(f"  point a client's base_url at  http://{host}:{port}/v1")
+    print(f"  or try it in a browser:       http://{host}:{port}/docs")
+    print()
+
+    uvicorn.run("gateway.proxy.app:app", host=host, port=port, reload=reload)
 
 
 def _show_config(rules_file: Path, rules: Rules) -> None:

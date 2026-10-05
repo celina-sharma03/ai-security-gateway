@@ -85,6 +85,33 @@ def error_body(message: str, kind: str) -> dict:
     return {"error": {"message": message, "type": kind, "param": None, "code": None}}
 
 
+@app.get("/")
+def root() -> dict[str, object]:
+    """What a person gets for opening the gateway in a browser.
+
+    It used to be a 404, which looks like a broken deployment rather than a
+    working one. Someone who has just changed their base_url and mistyped the
+    path needs to know they reached the right machine.
+
+    Deliberately says nothing about the mode or the rules. `/health` reports
+    the mode because deployment tooling needs it, and in V1 neither endpoint
+    has any authentication -- so the less an unauthenticated caller learns
+    about how enforcement is configured, the better. Putting these behind the
+    per-key auth that arrives in Phase 5 is on the list.
+    """
+    return {
+        "name": "AI Security Gateway",
+        "version": app.version,
+        "description": "Self-hosted. Local. Nothing leaves.",
+        "endpoints": {
+            "/v1/chat/completions": "the proxy -- point your client's base_url here",
+            "/check": "what does the gateway see in this text? no provider contacted",
+            "/health": "is it up, and in which mode",
+            "/docs": "the API, documented and clickable",
+        },
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Is the gateway up, and what would it do with traffic right now?
