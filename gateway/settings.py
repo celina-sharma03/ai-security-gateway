@@ -43,5 +43,11 @@ class Settings(BaseSettings):
     upstream_base_url: str = "https://api.openai.com/v1"
     """Where allowed requests get forwarded. Never hardcoded elsewhere."""
 
+    upstream_timeout: float = 30.0
+    """Seconds to wait for the provider. Long, because a model thinking hard
+    about a long prompt is normal and cutting it off would be worse than
+    waiting. Not unlimited, because a request that hangs forever holds a
+    connection open forever."""
+
 
 settings = Settings()

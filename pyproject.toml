@@ -14,6 +14,10 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_mode = "auto"
+# Any `async def` test just runs. The alternative, "strict", needs an
+# @pytest.mark.asyncio on every one of them -- more explicit, and one more
+# thing to forget.
 
 [tool.mypy]
 python_version = "3.12"
