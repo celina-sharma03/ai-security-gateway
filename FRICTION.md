@@ -289,3 +289,51 @@ over what other people have already pulled.
 The lesson: **git history is published data.** A commit is not a draft. The
 moment to decide what belongs in it is before a remote exists — which, for this
 repo, was the afternoon of the first push.
+
+## Phase 4
+
+**A pasted placeholder that looked like content.** The Phase 4 dependencies
+went into requirements.txt as `fastapi==<version you saw>` -- a template that
+was meant to be filled in, pasted whole. It was caught in review before the
+commit, but it would have broken `pip install -r requirements.txt` on every
+machine including this one, and the file *looks* right at a glance: three
+pinned lines in the proper format.
+
+The lesson is about what a placeholder looks like once it's in a file. A
+`TODO` is loud. `<version you saw>` reads like real content until someone runs
+it. If a template has blanks, the blanks should be ugly enough to notice.
+
+**A test that passed 2,349 times out of 2,350.** The proxy tests went green on
+their own and then failed once in the full suite, on this assertion:
+
+    assert "4111" not in response.text
+
+A blocked response carries a random id -- `chatcmpl-gateway-de9c4d2adeef4111`
+-- and "4111" turns up in sixteen random hex characters about once in every
+2,350 responses. Measured, not guessed: 85 hits in 200,000 generated
+responses.
+
+Nothing was wrong with the code. The test was too loose, and that is worse
+than it sounds. A test that fails once a fortnight for no reason is a test
+that teaches you to re-run the suite instead of reading the failure, and the
+day it fails for a *real* reason you will shrug at it too.
+
+The fix was to assert on the whole value -- `"4111 1111 1111 1111"`, spaces
+and all -- which cannot appear by chance. The broad sweep across the entire
+response body stays, because that is what catches a leak in a field nobody
+thought about.
+
+**The linter was right about the wrong thing.** Ruff rejected FastAPI's own
+documented style, `pipeline: Pipeline = Depends(get_pipeline)`, under B008 --
+"do not perform function call in argument defaults". The rule exists for a
+real bug: a default like `def f(when=datetime.now())` is evaluated once, at
+import, and every caller gets the same stale value. FastAPI's `Depends` is
+built to be used exactly that way and is not stale.
+
+Rather than silence the rule, the fix was the newer idiom that both agree on:
+
+    pipeline: Annotated[Pipeline, Depends(get_pipeline)]
+
+`Annotated` separates the type from the metadata about it, so there is no
+default value to object to. Worth preferring in general -- when a linter and a
+framework disagree, there is often a third form that neither has to lose.

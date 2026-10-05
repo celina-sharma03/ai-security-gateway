@@ -132,8 +132,11 @@ def test_a_blocked_response_looks_like_a_real_one():
 
 
 def test_a_blocked_response_never_contains_the_blocked_value():
+    """The whole number, not a four-digit fragment: the response carries a
+    random hex id, and "4111" appears in random hex about once in 2,350
+    responses. See the note in test_proxy_route.py."""
     body = a_request("my card is 4111 1111 1111 1111")
 
     response = provider.blocked_response(body, "Blocked: it contained a card number.")
 
-    assert "4111" not in str(response)
+    assert "4111 1111 1111 1111" not in str(response)

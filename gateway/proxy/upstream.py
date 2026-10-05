@@ -53,6 +53,19 @@ class UpstreamError(Exception):
     """
 
 
+class UpstreamTimeout(UpstreamError):
+    """It answered too slowly, or not at all. Becomes a 504 upstream."""
+
+
+class UpstreamUnreachable(UpstreamError):
+    """It could not be reached at all -- DNS, connection, TLS. A 502.
+
+    Separate from a timeout because they mean different things to whoever is
+    on call: one says the provider is slow, the other says the network or the
+    address is wrong.
+    """
+
+
 @dataclass(frozen=True)
 class UpstreamResponse:
     """What came back, in the three parts the route needs to answer with."""
@@ -102,11 +115,11 @@ class Upstream:
                 url, json=body, headers=forwarded_headers(headers)
             )
         except httpx.TimeoutException as exc:
-            raise UpstreamError(
+            raise UpstreamTimeout(
                 f"{type(exc).__name__}: the provider did not answer in time"
             ) from exc
         except httpx.HTTPError as exc:
-            raise UpstreamError(
+            raise UpstreamUnreachable(
                 f"{type(exc).__name__}: the provider could not be reached"
             ) from exc
 
