@@ -81,3 +81,12 @@ def test_the_root_does_not_advertise_the_mode():
     does not, because in V1 neither endpoint has any authentication and an
     unauthenticated caller does not need to know whether enforcement is on."""
     assert "mode" not in client.get("/").json()
+
+
+def test_the_api_reports_the_same_version_as_the_package():
+    """Caught live: the CLI said 0.1.0 while the API said 0.4.0, because the
+    version was hardcoded into the FastAPI app. One source, and a test so the
+    two cannot drift apart again."""
+    from gateway import __version__
+
+    assert client.get("/").json()["version"] == __version__

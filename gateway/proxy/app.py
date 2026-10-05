@@ -24,6 +24,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
+from gateway import __version__
 from gateway.console import use_utf8_output
 from gateway.engine.pipeline import Pipeline, build_pipeline
 from gateway.engine.result import Action
@@ -64,7 +65,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AI Security Gateway",
     description="Self-hosted. Local. Nothing leaves.",
-    version="0.4.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
