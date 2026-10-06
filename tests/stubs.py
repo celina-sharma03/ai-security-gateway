@@ -27,6 +27,7 @@ assertion in the whole project.
 import json
 
 import httpx
+from pydantic import SecretStr
 
 CANNED_REPLY = "Hello! How can I help?"
 
@@ -108,3 +109,14 @@ class StubProvider:
         return "\n".join(
             message["content"] for message in messages if isinstance(message.get("content"), str)
         )
+
+
+TEST_PROVIDER_KEY = SecretStr("sk-not-a-real-key-0000000000000000000000000")
+"""The provider key the gateway holds, in tests.
+
+Since Phase 5 step 4 an Upstream in normal mode refuses to send a request
+without one -- so tests that are about something else entirely (forwarding,
+timeouts, redaction) still have to be configured like the real thing. That is
+the right way round: the alternative is a suite where the gateway is
+unconfigured everywhere and nobody notices.
+"""

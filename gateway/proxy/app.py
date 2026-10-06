@@ -33,7 +33,12 @@ from gateway.providers.openai import OpenAIProvider
 from gateway.proxy.refusal import refusal_message
 from gateway.proxy.schemas import CheckRequest, CheckResponse, FindingOut
 from gateway.proxy.security import AuthError, require_key
-from gateway.proxy.upstream import Upstream, UpstreamTimeout, UpstreamUnreachable
+from gateway.proxy.upstream import (
+    Upstream,
+    UpstreamNotConfigured,
+    UpstreamTimeout,
+    UpstreamUnreachable,
+)
 from gateway.settings import settings
 from gateway.storage.models import ApiKey
 
@@ -257,6 +262,14 @@ async def chat_completions(
 
     try:
         sent = await upstream.send("/chat/completions", onward, outgoing)
+    except UpstreamNotConfigured as exc:
+        # The operator's mistake, not the caller's, and 500 says so. Anything
+        # in the 400s would send them looking at their own request.
+        return JSONResponse(
+            status_code=500,
+            content=error_body(str(exc), "gateway_misconfigured"),
+            headers=headers,
+        )
     except UpstreamTimeout as exc:
         return JSONResponse(
             status_code=504, content=error_body(str(exc), "upstream_timeout"), headers=headers

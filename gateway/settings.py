@@ -6,6 +6,7 @@ Anything configurable lives here. Nothing reads os.environ directly.
 from enum import Enum
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -42,6 +43,32 @@ class Settings(BaseSettings):
 
     upstream_base_url: str = "https://api.openai.com/v1"
     """Where allowed requests get forwarded. Never hardcoded elsewhere."""
+
+    upstream_api_key: SecretStr | None = None
+    """The provider's key, held by the gateway rather than by the callers.
+
+    This is what turns the gateway from advice into a control. If developers
+    hold the provider key, anyone who finds the gateway inconvenient points
+    their code straight at the provider and nobody ever knows. If the gateway
+    holds the only key, routing around it means having no key at all.
+
+    SecretStr rather than str so that printing the settings -- in a startup
+    banner, a log line, an exception, a debugger -- shows `**********` and not
+    the key. The value is only reachable by asking for it explicitly, with
+    `.get_secret_value()`, which is a thing you have to mean.
+
+    It lives in the environment and never in the database, so a stolen copy of
+    the database does not include it.
+    """
+
+    passthrough_provider_key: bool = False
+    """Let callers keep using their own provider key, and identify themselves
+    with `X-Gateway-Key` instead.
+
+    Off by default, because a gateway that can be walked around protects
+    nobody. On for a team migrating, who have forty repositories to change and
+    need the gateway working before the key moves.
+    """
 
     database_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'gateway.db'}"
     """SQLite by default: a file, no server, nothing to install. Anyone can

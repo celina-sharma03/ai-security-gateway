@@ -18,7 +18,7 @@ from gateway.auth import keys as keyring
 from gateway.proxy.app import app, get_upstream
 from gateway.proxy.upstream import Upstream
 from gateway.storage.models import ApiKey
-from tests.stubs import StubProvider
+from tests.stubs import TEST_PROVIDER_KEY, StubProvider
 
 ASK = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "what is 2+2?"}]}
 
@@ -30,7 +30,9 @@ def stub() -> StubProvider:
 
 @pytest.fixture
 def client(stub: StubProvider, file_database):
-    app.dependency_overrides[get_upstream] = lambda: Upstream(transport=stub.transport)
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=stub.transport, api_key=TEST_PROVIDER_KEY, passthrough=False
+    )
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -120,14 +122,19 @@ def test_the_answer_says_whose_traffic_it_was(client, gateway_key):
 
 def test_the_gateway_key_never_reaches_the_provider(client, stub, gateway_key):
     """Forwarding it would write a working credential for this gateway into a
-    third party's logs."""
+    third party's logs.
+
+    Since step 4 there *is* an Authorization header going out -- the gateway's
+    own provider key, put there on the way. What matters is that it is that
+    one and not the caller's.
+    """
     client.post(
         "/v1/chat/completions", json=ASK, headers={"Authorization": f"Bearer {gateway_key}"}
     )
 
     sent = stub.requests[0]
 
-    assert "authorization" not in sent.headers
+    assert sent.headers["authorization"] == f"Bearer {TEST_PROVIDER_KEY.get_secret_value()}"
     assert gateway_key not in str(dict(sent.headers))
     assert gateway_key not in sent.content.decode()
 
@@ -135,6 +142,10 @@ def test_the_gateway_key_never_reaches_the_provider(client, stub, gateway_key):
 def test_the_gateway_key_is_not_forwarded_in_passthrough_either(client, stub, gateway_key):
     """Here the caller does send a provider key, which goes on untouched --
     but X-Gateway-Key is ours and stops here."""
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=stub.transport, api_key=None, passthrough=True
+    )
+
     client.post(
         "/v1/chat/completions",
         json=ASK,

@@ -25,6 +25,7 @@ told the truth.
 from dataclasses import dataclass
 
 import httpx
+from pydantic import SecretStr
 
 from gateway.settings import settings
 
@@ -66,6 +67,16 @@ class UpstreamUnreachable(UpstreamError):
     """
 
 
+class UpstreamNotConfigured(UpstreamError):
+    """The gateway is meant to hold the provider key and hasn't got one.
+
+    Raised rather than shrugged at. Forwarding the request anyway would send
+    it unauthenticated, the provider would answer 401, and whoever is reading
+    that 401 would spend an afternoon looking for a problem with their key
+    rather than at a gateway that never had one.
+    """
+
+
 @dataclass(frozen=True)
 class UpstreamResponse:
     """What came back, in the three parts the route needs to answer with."""
@@ -93,12 +104,49 @@ class Upstream:
         base_url: str | None = None,
         timeout: float | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        api_key: SecretStr | None = None,
+        passthrough: bool | None = None,
     ) -> None:
         self.base_url = (base_url or settings.upstream_base_url).rstrip("/")
+        self.api_key = api_key if api_key is not None else settings.upstream_api_key
+        self.passthrough = (
+            passthrough if passthrough is not None else settings.passthrough_provider_key
+        )
         self._client = httpx.AsyncClient(
             timeout=timeout if timeout is not None else settings.upstream_timeout,
             transport=transport,
         )
+
+    def _authorise(self, headers: dict[str, str]) -> dict[str, str]:
+        """Put the gateway's own provider key on the request.
+
+        In the normal case any Authorization the caller sent is **removed**
+        first, whatever it was. The route already strips the gateway key, and
+        this strips it again: the invariant worth having is that in normal
+        mode exactly one credential can leave this process, and it is the one
+        the operator configured. Two independent guards on the same mistake is
+        the right number when the mistake is "a credential reached somebody
+        else".
+
+        In passthrough mode nothing is touched. The caller's key is theirs and
+        the gateway was never given one.
+        """
+        if self.passthrough:
+            return headers
+
+        without = {
+            name: value for name, value in headers.items() if name.lower() != "authorization"
+        }
+
+        if self.api_key is None:
+            raise UpstreamNotConfigured(
+                "This gateway holds no provider key. Set GATEWAY_UPSTREAM_API_KEY, "
+                "or set GATEWAY_PASSTHROUGH_PROVIDER_KEY=true to let callers send "
+                "their own."
+            )
+
+        without["Authorization"] = f"Bearer {self.api_key.get_secret_value()}"
+        return without
 
     async def send(self, path: str, body: dict, headers: dict[str, str]) -> UpstreamResponse:
         """Forward one request and bring back what the provider said.
@@ -112,7 +160,7 @@ class Upstream:
 
         try:
             response = await self._client.post(
-                url, json=body, headers=forwarded_headers(headers)
+                url, json=body, headers=self._authorise(forwarded_headers(headers))
             )
         except httpx.TimeoutException as exc:
             raise UpstreamTimeout(

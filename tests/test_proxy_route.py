@@ -18,7 +18,7 @@ from gateway.engine.rules import Rules, parse_rules
 from gateway.proxy.app import app, get_pipeline, get_upstream
 from gateway.proxy.upstream import Upstream
 from gateway.settings import Mode
-from tests.stubs import StubProvider
+from tests.stubs import TEST_PROVIDER_KEY, StubProvider
 
 CARD = "my card is 4111 1111 1111 1111"
 
@@ -46,7 +46,10 @@ def client(stub: StubProvider, gateway_key: str):
     the lock cannot notice when the lock stops working.
     """
     app.dependency_overrides[get_upstream] = lambda: Upstream(
-        base_url="https://provider.test/v1", transport=stub.transport
+        base_url="https://provider.test/v1",
+        transport=stub.transport,
+        api_key=TEST_PROVIDER_KEY,
+        passthrough=False,
     )
     yield TestClient(app, headers={"Authorization": f"Bearer {gateway_key}"})
     app.dependency_overrides.clear()
@@ -203,7 +206,10 @@ def test_a_provider_key_in_passthrough_reaches_the_provider(client, stub, gatewa
     the gateway key separately so the gateway can tell who they are without
     touching the credential it was not given."""
     run_in(Mode.ENFORCE)
-    provider_key = "Bearer sk-not-a-real-key-0000000000000000"
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=stub.transport, api_key=None, passthrough=True
+    )
+    provider_key = "Bearer sk-not-a-real-key-1111111111111111"
 
     client.post(
         "/v1/chat/completions",
@@ -221,7 +227,9 @@ def test_the_providers_rate_limit_is_passed_through(client):
     """Their answer, not ours. A caller who is rate limited needs to know
     that, and not a gateway error invented on top of it."""
     stub = StubProvider(status_code=429, body={"error": {"message": "slow down"}})
-    app.dependency_overrides[get_upstream] = lambda: Upstream(transport=stub.transport)
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=stub.transport, api_key=TEST_PROVIDER_KEY, passthrough=False
+    )
     run_in(Mode.ENFORCE)
 
     response = client.post("/v1/chat/completions", json=CARD_REQUEST)
@@ -232,7 +240,9 @@ def test_the_providers_rate_limit_is_passed_through(client):
 
 def test_a_slow_provider_becomes_a_504(client):
     stub = StubProvider(error=httpx.ConnectTimeout("too slow"))
-    app.dependency_overrides[get_upstream] = lambda: Upstream(transport=stub.transport)
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=stub.transport, api_key=TEST_PROVIDER_KEY, passthrough=False
+    )
     run_in(Mode.ENFORCE)
 
     response = client.post("/v1/chat/completions", json=CARD_REQUEST)
@@ -243,7 +253,9 @@ def test_a_slow_provider_becomes_a_504(client):
 
 def test_an_unreachable_provider_becomes_a_502(client):
     stub = StubProvider(error=httpx.ConnectError("no route to host"))
-    app.dependency_overrides[get_upstream] = lambda: Upstream(transport=stub.transport)
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=stub.transport, api_key=TEST_PROVIDER_KEY, passthrough=False
+    )
     run_in(Mode.ENFORCE)
 
     response = client.post("/v1/chat/completions", json=CARD_REQUEST)
@@ -256,7 +268,9 @@ def test_an_upstream_failure_still_reports_the_verdict(client):
     """The gateway did its job even though the provider didn't. The headers
     say so, which is what a log or a dashboard needs."""
     stub = StubProvider(error=httpx.ConnectError("no route to host"))
-    app.dependency_overrides[get_upstream] = lambda: Upstream(transport=stub.transport)
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=stub.transport, api_key=TEST_PROVIDER_KEY, passthrough=False
+    )
     run_in(Mode.ENFORCE)
 
     response = client.post("/v1/chat/completions", json=CARD_REQUEST)

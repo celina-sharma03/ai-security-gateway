@@ -125,7 +125,15 @@ def _serve(host: str, port: int, *, reload: bool) -> None:
     print(f"  mode:      {settings.mode.value}")
     print(f"  rules:     {settings.rules_file}")
     print(f"  upstream:  {settings.upstream_base_url}")
+    print(f"  key:       {_provider_key_line()}")
     print()
+
+    if settings.upstream_api_key is None and not settings.passthrough_provider_key:
+        print("  No provider key. Every proxied request will fail until you set")
+        print("  GATEWAY_UPSTREAM_API_KEY, or allow callers to send their own with")
+        print("  GATEWAY_PASSTHROUGH_PROVIDER_KEY=true.")
+        print()
+
     print(f"  listening on  http://{host}:{port}")
     print(f"  point a client's base_url at  http://{host}:{port}/v1")
     print(f"  or try it in a browser:       http://{host}:{port}/docs")
@@ -196,11 +204,22 @@ def _show_keys(keys: list) -> None:
         )
 
 
+def _provider_key_line() -> str:
+    """Whether a provider key is configured -- never the key itself."""
+    if settings.passthrough_provider_key:
+        return "passthrough (callers send their own)"
+    if settings.upstream_api_key is None:
+        return "NOT SET -- proxied requests will be refused"
+    return "set"
+
+
 def _show_config(rules_file: Path, rules: Rules) -> None:
     print(f"AI Security Gateway {__version__}")
     print(f"  mode:     {settings.mode.value}")
     print(f"  rules:    {rules_file}")
     print(f"  upstream: {settings.upstream_base_url}")
+    print(f"  key:      {_provider_key_line()}")
+    print(f"  database: {settings.database_url}")
     print(f"  listen:   {settings.host}:{settings.port}")
     print()
     print("What happens when each category is found:")

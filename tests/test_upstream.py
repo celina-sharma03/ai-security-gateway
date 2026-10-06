@@ -13,13 +13,21 @@ import httpx
 import pytest
 
 from gateway.proxy.upstream import Upstream, UpstreamError, forwarded_headers
-from tests.stubs import CANNED_REPLY, StubProvider
+from tests.stubs import CANNED_REPLY, TEST_PROVIDER_KEY, StubProvider
 
 BODY = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "hello"}]}
 
 
 def an_upstream(stub: StubProvider) -> Upstream:
-    return Upstream(base_url="https://provider.test/v1", transport=stub.transport)
+    """Configured the way a real deployment is: the gateway holds the
+    provider key. Since step 4 an unconfigured Upstream refuses to send at
+    all, which is why even tests about timeouts have to be set up properly."""
+    return Upstream(
+        base_url="https://provider.test/v1",
+        transport=stub.transport,
+        api_key=TEST_PROVIDER_KEY,
+        passthrough=False,
+    )
 
 
 async def test_the_body_arrives_exactly_as_given():
@@ -108,13 +116,15 @@ def test_only_allowlisted_headers_are_forwarded():
     assert set(sent) == {"Authorization", "Content-Type", "OpenAI-Beta"}
 
 
-async def test_the_callers_key_is_forwarded_untouched():
-    """V1 holds no key of its own: whatever the caller sent is what the
-    provider gets. Per-key auth is Phase 5."""
+async def test_in_passthrough_the_callers_key_is_forwarded_untouched():
+    """Passthrough is for a team mid-migration: they still hold their own
+    provider key, and the gateway does not touch a credential it was not
+    given. Normal mode replaces it -- see test_provider_key.py."""
     stub = StubProvider()
-    key = "Bearer sk-not-a-real-key-0000000000000000"
+    key = "Bearer sk-not-a-real-key-1111111111111111"
 
-    await an_upstream(stub).send("/chat/completions", BODY, {"Authorization": key})
+    upstream = Upstream(transport=stub.transport, api_key=None, passthrough=True)
+    await upstream.send("/chat/completions", BODY, {"Authorization": key})
 
     assert stub.requests[0].headers["authorization"] == key
 
