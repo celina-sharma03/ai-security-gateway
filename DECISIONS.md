@@ -263,8 +263,13 @@ Each exits on something you can demonstrate, not a feeling of doneness.
 
 The `/check` endpoint is half a day's work and is the best demo the project will ever have — someone pastes a fake key into a single command and watches it get caught, having installed nothing. That's the moment a stranger decides whether to read the setup instructions.
 
-**5 — Identity, tenancy and storage.** Per-key auth, tenant IDs and token counts on every record, database, every event logged.
-*Exit: two different keys' traffic is distinguishable in the database, and tenant labels are on every row.*
+**5 — Identity, tenancy and storage.** Per-key auth, tenant IDs and token counts on every record, database, every event logged. **The gateway holds the provider key** — developers get gateway keys, so routing around it means having no key at all. SQLite by default, Postgres by changing one URL. The verdict is recorded and the content never is.
+*Exit: two different keys' traffic is distinguishable in the database, and tenant labels are on every row.* **Met**, and visible in `python -m gateway events --summary`.
+
+Two things left open by Phase 5, both deliberate:
+
+- **A failed authentication is not recorded.** Auth happens before the route runs, so there is no tenant to attribute the attempt to, and `events` requires one. Someone guessing keys is currently invisible. It needs either a nullable tenant on events or a table of its own, and the decision belongs with the dashboard.
+- **`/health`, `/` and `/check` need no key.** `/check` is the demo — requiring a key would mean nobody can try the thing before deciding to run it — but a deployment that wants them private has no way to say so yet.
 
 **6 — Docs, then ship V1.**
 *Exit: someone follows the instructions on a clean machine without asking a single question.*
