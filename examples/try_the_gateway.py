@@ -7,8 +7,10 @@ different from the version that talks straight to the provider:
 
 Run it with the gateway running in enforce mode:
 
-    $env:GROQ_API_KEY = "gsk_..."
+    $env:GATEWAY_KEY = "gw_live_..."
     python examples/try_the_gateway.py
+
+The gateway holds the provider key; this script holds only a gateway key.
 
 It sends a card number and an email address, and asks the model to repeat the
 text back. The model can only repeat what it received -- so its answer is the
@@ -56,10 +58,17 @@ def use_utf8_output() -> None:
 def main() -> int:
     use_utf8_output()
 
-    key = os.environ.get("GROQ_API_KEY")
+    # GATEWAY_KEY, not GROQ_API_KEY. Since the gateway holds the provider
+    # key, this script never sees one -- which is the point, and worth having
+    # the variable name say so. A developer who finds a provider key on their
+    # own machine can route around the gateway; one who has only this cannot.
+    key = os.environ.get("GATEWAY_KEY") or os.environ.get("GROQ_API_KEY")
     if not key:
-        print("Set GROQ_API_KEY first:", file=sys.stderr)
-        print('    $env:GROQ_API_KEY = "gsk_..."', file=sys.stderr)
+        print("Set GATEWAY_KEY first -- a gateway key, not a provider one:", file=sys.stderr)
+        print(
+            '    python -m gateway keys create --tenant "Billing" --label "laptop"', file=sys.stderr
+        )
+        print('    $env:GATEWAY_KEY = "gw_live_..."', file=sys.stderr)
         return 2
 
     model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -81,25 +90,29 @@ def main() -> int:
     except APIStatusError as exc:
         # Two very different things arrive here, and saying "the provider
         # answered" for both would send someone looking in the wrong place. A
-        # 401 is almost always the gateway refusing the key in GROQ_API_KEY;
+        # 401 is almost always the gateway refusing the key in GATEWAY_KEY;
         # anything else has usually come back from the provider untouched.
         who = "the gateway" if exc.status_code == 401 else "the provider"
         print(f"{who} answered {exc.status_code}:", file=sys.stderr)
         print(f"  {exc.message}\n", file=sys.stderr)
 
         if exc.status_code == 401:
-            print("GROQ_API_KEY must hold a *gateway* key, not a provider key", file=sys.stderr)
+            print("GATEWAY_KEY must hold a gateway key, not a provider key", file=sys.stderr)
             print("and not a placeholder. Make one, and copy the whole string:\n", file=sys.stderr)
             print(
                 '  python -m gateway keys create --tenant "Billing" --label "my laptop"\n'
-                '  $env:GROQ_API_KEY = "gw_live_...the whole thing..."',
+                '  $env:GATEWAY_KEY = "gw_live_...the whole thing..."',
                 file=sys.stderr,
             )
 
         if exc.status_code == 404:
+            # Note which key this needs: listing a provider's models is a
+            # request to the *provider*, so it takes the provider's key -- the
+            # one the gateway holds, not the gateway key this script uses.
+            # Run it in the terminal where the server's environment is set.
             print("model names change. list the current ones with:", file=sys.stderr)
             print(
-                '  $h = @{ Authorization = "Bearer $env:GROQ_API_KEY" }\n'
+                '  $h = @{ Authorization = "Bearer $env:GATEWAY_UPSTREAM_API_KEY" }\n'
                 '  (Invoke-RestMethod -Uri "https://api.groq.com/openai/v1/models"'
                 " -Headers $h).data.id\n"
                 '  $env:GROQ_MODEL = "the one you picked"',
