@@ -118,6 +118,21 @@ A blocked request comes back as a **normal, readable answer**, not an HTTP
 error — your application does not crash, and the person reads why. The
 provider's own errors are passed through untouched.
 
+## What it doesn't protect against
+
+Read [`docs/what-it-protects.md`](docs/what-it-protects.md) before deploying
+this anywhere. The short version:
+
+- **shadow mode is the default, and it changes nothing** — a gateway nobody has
+  configured protects nothing
+- **it cannot see meaning** — names, addresses and confidential prose have no
+  shape to match
+- **a bare number with no words around it is missed**, deliberately: the
+  alternative redacts every invoice number in the company
+- **prompt injection, streaming and checking the reply** are V2
+- **it holds your provider key**, which is the point, and also means the
+  gateway host is worth protecting
+
 ## Shadow mode
 
 New installs start in **shadow mode**: the gateway checks everything and
