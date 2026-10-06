@@ -34,17 +34,21 @@ def stub() -> StubProvider:
 
 
 @pytest.fixture
-def client(stub: StubProvider):
-    """The real app, with a fake provider behind it.
+def client(stub: StubProvider, gateway_key: str):
+    """The real app, with a fake provider behind it and a real key in front.
 
     `dependency_overrides` is FastAPI's seam for exactly this: the route asks
     for an Upstream, and in tests it gets one wired to the stub. The route is
     not modified, and does not know.
+
+    The key is a genuine issued one, in a throwaway database -- these tests go
+    through authentication rather than around it, because a test that skips
+    the lock cannot notice when the lock stops working.
     """
     app.dependency_overrides[get_upstream] = lambda: Upstream(
         base_url="https://provider.test/v1", transport=stub.transport
     )
-    yield TestClient(app)
+    yield TestClient(app, headers={"Authorization": f"Bearer {gateway_key}"})
     app.dependency_overrides.clear()
 
 
@@ -194,13 +198,20 @@ def test_a_request_with_no_text_is_forwarded_as_it_is(client, stub):
     assert stub.last_body == {"model": "gpt-4o-mini"}
 
 
-def test_the_callers_key_reaches_the_provider(client, stub):
+def test_a_provider_key_in_passthrough_reaches_the_provider(client, stub, gateway_key):
+    """Passthrough: the caller still holds their own provider key, and sends
+    the gateway key separately so the gateway can tell who they are without
+    touching the credential it was not given."""
     run_in(Mode.ENFORCE)
-    key = "Bearer sk-not-a-real-key-0000000000000000"
+    provider_key = "Bearer sk-not-a-real-key-0000000000000000"
 
-    client.post("/v1/chat/completions", json=CARD_REQUEST, headers={"Authorization": key})
+    client.post(
+        "/v1/chat/completions",
+        json=CARD_REQUEST,
+        headers={"Authorization": provider_key, "X-Gateway-Key": gateway_key},
+    )
 
-    assert stub.requests[0].headers["authorization"] == key
+    assert stub.requests[0].headers["authorization"] == provider_key
 
 
 # --- when things go wrong ------------------------------------------------

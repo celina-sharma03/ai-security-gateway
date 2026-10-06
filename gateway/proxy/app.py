@@ -32,8 +32,10 @@ from gateway.engine.rules import load_rules
 from gateway.providers.openai import OpenAIProvider
 from gateway.proxy.refusal import refusal_message
 from gateway.proxy.schemas import CheckRequest, CheckResponse, FindingOut
+from gateway.proxy.security import AuthError, require_key
 from gateway.proxy.upstream import Upstream, UpstreamTimeout, UpstreamUnreachable
 from gateway.settings import settings
+from gateway.storage.models import ApiKey
 
 # Uvicorn imports this module to start the server, which makes it an entry
 # point like any other -- and Windows consoles still default to cp1252.
@@ -84,6 +86,22 @@ def error_body(message: str, kind: str) -> dict:
     """An error in the provider's own shape, so a client library can read it
     the way it reads any other error."""
     return {"error": {"message": message, "type": kind, "param": None, "code": None}}
+
+
+@app.exception_handler(AuthError)
+async def unauthorized(request: Request, exc: AuthError) -> JSONResponse:
+    """401 in the provider's own error shape.
+
+    An HTTP error is right here, unlike a block: a blocked request is the
+    gateway working, while a missing key is the caller having made a mistake
+    they need to fix. Client libraries raise an authentication error on this,
+    which is exactly what should happen.
+    """
+    return JSONResponse(
+        status_code=401,
+        content=error_body(exc.message, "invalid_api_key"),
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 @app.get("/")
@@ -167,6 +185,7 @@ def check(
 @app.post("/v1/chat/completions")
 async def chat_completions(
     request: Request,
+    key: Annotated[ApiKey, Depends(require_key)],
     pipeline: Annotated[Pipeline, Depends(get_pipeline)],
     upstream: Annotated[Upstream, Depends(get_upstream)],
 ) -> Response:
@@ -210,6 +229,7 @@ async def chat_completions(
         "X-Gateway-Decided": decided.value,
         "X-Gateway-Action": action.value,
         "X-Gateway-Categories": ",".join(categories),
+        "X-Gateway-Tenant": key.tenant.name,
     }
 
     # `action` is already mode-aware: in shadow mode the pipeline turns a block
@@ -226,8 +246,17 @@ async def chat_completions(
     # the redacted text in enforce mode, the original in shadow.
     onward = provider.with_texts(body, [result.text for result in results]) if results else body
 
+    # The gateway key must not travel onward. Sending `gw_live_...` to the
+    # provider would write a working credential for this gateway into a third
+    # party's logs. Step 4 puts the real provider key here instead; until then
+    # the request goes on with no Authorization at all, which is honest -- it
+    # will be refused by anyone who needs one.
+    outgoing = dict(request.headers)
+    if getattr(request.state, "strip_authorization", False):
+        outgoing.pop("authorization", None)
+
     try:
-        sent = await upstream.send("/chat/completions", onward, dict(request.headers))
+        sent = await upstream.send("/chat/completions", onward, outgoing)
     except UpstreamTimeout as exc:
         return JSONResponse(
             status_code=504, content=error_body(str(exc), "upstream_timeout"), headers=headers
