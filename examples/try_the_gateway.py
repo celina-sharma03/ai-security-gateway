@@ -79,11 +79,22 @@ def main() -> int:
             messages=[{"role": "user", "content": PROMPT}],
         )
     except APIStatusError as exc:
-        # The provider's own error, forwarded by the gateway untouched. Worth
-        # reading as what it is rather than as a crash: a 404 here means the
-        # request reached the provider and the provider declined it.
-        print(f"the provider answered {exc.status_code}:", file=sys.stderr)
+        # Two very different things arrive here, and saying "the provider
+        # answered" for both would send someone looking in the wrong place. A
+        # 401 is almost always the gateway refusing the key in GROQ_API_KEY;
+        # anything else has usually come back from the provider untouched.
+        who = "the gateway" if exc.status_code == 401 else "the provider"
+        print(f"{who} answered {exc.status_code}:", file=sys.stderr)
         print(f"  {exc.message}\n", file=sys.stderr)
+
+        if exc.status_code == 401:
+            print("GROQ_API_KEY must hold a *gateway* key, not a provider key", file=sys.stderr)
+            print("and not a placeholder. Make one, and copy the whole string:\n", file=sys.stderr)
+            print(
+                '  python -m gateway keys create --tenant "Billing" --label "my laptop"\n'
+                '  $env:GROQ_API_KEY = "gw_live_...the whole thing..."',
+                file=sys.stderr,
+            )
 
         if exc.status_code == 404:
             print("model names change. list the current ones with:", file=sys.stderr)
