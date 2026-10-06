@@ -337,3 +337,47 @@ Rather than silence the rule, the fix was the newer idiom that both agree on:
 `Annotated` separates the type from the metadata about it, so there is no
 default value to object to. Worth preferring in general -- when a linter and a
 framework disagree, there is often a third form that neither has to lose.
+
+**The model refused to prove it.** The end-to-end demo asks a real model to
+repeat its input back, so the answer shows what actually arrived. The first
+run came back: *"I'm sorry, but I can't help with that."*
+
+Nothing was wrong. What reached the model was `my card is [CREDIT_CARD_1] and
+my email is [EMAIL_1]` — no data in it at all — but the words around the
+placeholders, plus "repeat this back exactly", read to the model as a request
+to handle card and personal data, and its safety training declined.
+
+It judged the sentence around the value rather than the value itself, which is
+exactly what this gateway does to decide whether ten digits are a phone number
+or an invoice reference. Same mechanism, different question: ours asks *what is
+this*, the model's asks *should I help with this*. And the model got it wrong
+in the same direction our Phase 2 patterns used to — a false positive on
+something already safe.
+
+The demo now asks it to list the bracketed tokens it can see. Same proof,
+nothing sensitive-looking to echo:
+
+    what the model says it received:
+      [CREDIT_CARD_1],[EMAIL_1]
+
+**A 404 that was an access problem.** Before that, the same demo failed with
+"The model `llama-3.3-70b-versatile` does not exist or you do not have access
+to it". It exists -- it is just marked Enterprise on Groq, and a free key
+cannot reach it. The message says both things and the eye reads only the first
+one.
+
+The gateway itself behaved correctly throughout, and that was worth seeing: the
+provider's 404 came back through the proxy untouched, exactly as designed. The
+demo script, though, answered with a Python traceback, which is a poor thing to
+hand a stranger. It now reads the provider's status, says what it means, and
+prints the command that lists the models the key can actually use.
+
+**`httpx2`, decided.** Starlette's test client warns that using it with `httpx`
+is deprecated. Deferred during Phase 4 until the library mattered, and now it
+does: the proxy's own outgoing calls use `httpx`, and they work.
+
+Staying on `httpx` for now. The warning is about Starlette's test client, not
+about `httpx` being broken, and moving a dependency on a deprecation notice
+alone -- before anything needs the new one -- is how a project collects churn
+instead of features. Revisit when Starlette requires it, which the warning will
+say more loudly when it happens.

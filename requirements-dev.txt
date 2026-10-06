@@ -4,3 +4,8 @@ pytest==8.4.2
 pytest-asyncio==1.3.0
 ruff==0.14.2
 mypy==1.18.2
+
+# The provider's own client library. Not used by the gateway -- used *against*
+# it, by examples/try_the_gateway.py, so the end-to-end proof is a real client
+# and not something we wrote to agree with us.
+openai==3.24.0
