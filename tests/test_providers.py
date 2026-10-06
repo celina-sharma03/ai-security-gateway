@@ -140,3 +140,52 @@ def test_a_blocked_response_never_contains_the_blocked_value():
     response = provider.blocked_response(body, "Blocked: it contained a card number.")
 
     assert "4111 1111 1111 1111" not in str(response)
+
+
+# --- what it cost --------------------------------------------------------
+
+
+def test_usage_is_read_from_the_reply():
+    raw = b'{"usage": {"prompt_tokens": 9, "completion_tokens": 7, "total_tokens": 16}}'
+
+    counted = provider.usage(raw)
+
+    assert counted.prompt_tokens == 9
+    assert counted.completion_tokens == 7
+    assert counted.total_tokens == 16
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b"",
+        b"not json at all",
+        b"<html>502 Bad Gateway</html>",
+        b"[1, 2, 3]",
+        b'{"choices": []}',
+        b'{"usage": null}',
+        b'{"usage": "unavailable"}',
+    ],
+    ids=lambda raw: repr(raw[:24]),
+)
+def test_an_unreadable_reply_means_unknown_not_broken(raw):
+    """This runs after the caller's answer is already in hand. There is
+    nothing left to win by objecting to the shape of it."""
+    counted = provider.usage(raw)
+
+    assert counted.prompt_tokens is None
+    assert counted.total_tokens is None
+
+
+def test_a_missing_field_is_unknown_rather_than_zero():
+    """None means "we don't know". Zero would mean "they told us it cost
+    nothing", which is a different claim."""
+    counted = provider.usage(b'{"usage": {"prompt_tokens": 9}}')
+
+    assert counted.prompt_tokens == 9
+    assert counted.completion_tokens is None
+
+
+def test_a_boolean_is_not_a_token_count():
+    """bool is an int in Python, so `true` would otherwise be stored as 1."""
+    assert provider.usage(b'{"usage": {"prompt_tokens": true}}').prompt_tokens is None

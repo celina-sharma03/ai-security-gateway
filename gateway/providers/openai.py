@@ -32,9 +32,12 @@ list that goes back in can never drift apart.
 """
 
 import copy
+import json
 import time
 import uuid
 from typing import Any
+
+from gateway.providers.base import Usage
 
 _Location = tuple[Any, ...]
 """A path to one string inside the request body, e.g.
@@ -135,3 +138,36 @@ class OpenAIProvider:
             ],
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         }
+
+    def usage(self, raw: bytes) -> Usage:
+        """The token counts out of a reply, in OpenAI's shape:
+
+            {"usage": {"prompt_tokens": 9, "completion_tokens": 7, ...}}
+
+        Forgiving at every step, and deliberately so. This runs after the
+        caller's answer is already in hand, so there is nothing left to win by
+        objecting: a reply that is not JSON, or has no usage, or reports it in
+        some shape we have not seen, means the cost is unknown. It does not
+        mean the request failed.
+        """
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return Usage()
+
+        counts = payload.get("usage") if isinstance(payload, dict) else None
+
+        if not isinstance(counts, dict):
+            return Usage()
+
+        def number(name: str) -> int | None:
+            value = counts.get(name)
+            # bool is an int in Python, and `True` as a token count would be a
+            # strange thing to store.
+            return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+        return Usage(
+            prompt_tokens=number("prompt_tokens"),
+            completion_tokens=number("completion_tokens"),
+            total_tokens=number("total_tokens"),
+        )

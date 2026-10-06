@@ -22,6 +22,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from gateway.providers.base import Usage
 from gateway.storage.models import ApiKey, Event, EventCategory
 
 log = logging.getLogger("gateway.events")
@@ -36,11 +37,14 @@ async def record(
     decided: str,
     action: str,
     categories: list[str],
+    usage: Usage | None = None,
     upstream_status: int | None = None,
     latency_ms: int | None = None,
     error: str | None = None,
 ) -> Event:
     """Write one event. Raises if it cannot -- see `record_safely`."""
+    counts = usage or Usage()
+
     event = Event(
         tenant_id=key.tenant_id,
         api_key_id=key.id,
@@ -49,6 +53,9 @@ async def record(
         decided=decided,
         action=action,
         blocked=action == "block",
+        prompt_tokens=counts.prompt_tokens,
+        completion_tokens=counts.completion_tokens,
+        total_tokens=counts.total_tokens,
         upstream_status=upstream_status,
         latency_ms=latency_ms,
         error=error,

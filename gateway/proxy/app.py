@@ -31,6 +31,7 @@ from gateway.console import use_utf8_output
 from gateway.engine.pipeline import Pipeline, build_pipeline
 from gateway.engine.result import Action
 from gateway.engine.rules import load_rules
+from gateway.providers.base import Usage
 from gateway.providers.openai import OpenAIProvider
 from gateway.proxy.refusal import refusal_message
 from gateway.proxy.schemas import CheckRequest, CheckResponse, FindingOut
@@ -252,6 +253,7 @@ async def chat_completions(
     # those is how an audit trail grows a hole that nobody notices for a month.
     upstream_status: int | None = None
     error: str | None = None
+    counted = Usage()
 
     # `action` is already mode-aware: in shadow mode the pipeline turns a block
     # into a log, so this branch is simply never taken there. The mode logic
@@ -303,6 +305,9 @@ async def chat_completions(
             # its body, its content type. A 429 stays a 429, because the caller
             # needs the provider's answer and not one of ours on top of it.
             upstream_status = sent.status_code
+            # Their numbers, not an estimate of ours: an estimate that
+            # disagrees with the invoice is worse than no number at all.
+            counted = provider.usage(sent.body)
             response = Response(
                 content=sent.body,
                 status_code=sent.status_code,
@@ -323,6 +328,7 @@ async def chat_completions(
         decided=decided.value,
         action=action.value,
         categories=categories,
+        usage=counted,
         upstream_status=upstream_status,
         latency_ms=int((time.perf_counter() - started) * 1000),
         error=error,

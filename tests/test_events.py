@@ -229,3 +229,57 @@ def test_a_failure_to_record_does_not_fail_the_request(client, file_database, mo
     assert recorded(file_database) == []
     assert "RuntimeError" in caplog.text
     assert "disk is full" not in caplog.text  # the type, never the message
+
+
+# --- what it cost --------------------------------------------------------
+
+
+def test_the_providers_token_counts_are_recorded(client, file_database):
+    """The stub answers with usage 9 / 7 / 16, the way a provider does."""
+    client.post("/v1/chat/completions", json=CLEAN_REQUEST)
+
+    (event,) = recorded(file_database)
+
+    assert event.prompt_tokens == 9
+    assert event.completion_tokens == 7
+    assert event.total_tokens == 16
+
+
+def test_a_reply_without_usage_records_nothing_rather_than_zero(client, file_database):
+    use_upstream(
+        StubProvider(body={"choices": []}),
+        api_key=TEST_PROVIDER_KEY,
+        passthrough=False,
+    )
+
+    client.post("/v1/chat/completions", json=CLEAN_REQUEST)
+
+    (event,) = recorded(file_database)
+
+    assert event.total_tokens is None
+
+
+def test_a_blocked_request_has_no_token_counts(client, file_database):
+    """Null because it never reached them, not zero. Zero would be a claim
+    about what the provider charged, and the provider was never asked."""
+    app.dependency_overrides[get_pipeline] = lambda: build_pipeline(
+        Mode.ENFORCE, parse_rules("categories:\n  credit_card: block\n")
+    )
+
+    client.post("/v1/chat/completions", json=CARD_REQUEST)
+
+    (event,) = recorded(file_database)
+
+    assert event.total_tokens is None
+    assert event.blocked is True
+
+
+def test_what_a_tenant_spent_can_be_added_up(client, file_database):
+    """The question Phase 5 exists to answer, asked of real recorded rows."""
+    for _ in range(3):
+        client.post("/v1/chat/completions", json=CLEAN_REQUEST)
+
+    events = recorded(file_database)
+
+    assert sum(event.total_tokens for event in events) == 48
+    assert {event.tenant.name for event in events} == {"Billing"}
