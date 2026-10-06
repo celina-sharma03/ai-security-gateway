@@ -8,6 +8,9 @@ python -m gateway keys create --tenant "Billing" --label "CI"
 python -m gateway keys list
 python -m gateway keys revoke gw_live_K3n8Qx7f
 
+python -m gateway events              the last few requests
+python -m gateway events --summary    totals per tenant, and what was caught
+
 Options for `check`:
 
 --mode shadow|enforce   use this mode for one run, instead of GATEWAY_MODE
@@ -67,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
         _serve(args.host or settings.host, args.port or settings.port, reload=args.reload)
     elif args.command == "keys":
         return asyncio.run(_keys(args))
+    elif args.command == "events":
+        return asyncio.run(_events(args))
     else:
         _show_config(rules_file, rules)
 
@@ -98,6 +103,13 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
 
     revoke = key_commands.add_parser("revoke", help="stop a key working")
     revoke.add_argument("prefix", help="the visible part, as shown by `keys list`")
+
+    events = commands.add_parser("events", help="what the gateway has seen")
+    events.add_argument("--tenant", help="only this tenant's traffic")
+    events.add_argument("--limit", type=int, default=20, help="how many rows (default 20)")
+    events.add_argument(
+        "--summary", action="store_true", help="totals per tenant instead of a list"
+    )
 
     serve = commands.add_parser("serve", help="run the proxy")
     serve.add_argument("--host", help=f"default {settings.host}, or GATEWAY_HOST")
@@ -177,6 +189,75 @@ async def _keys(args: argparse.Namespace) -> int:
         return 2
 
     return 0
+
+
+async def _events(args: argparse.Namespace) -> int:
+    from sqlalchemy.exc import OperationalError
+
+    from gateway.storage import database, queries
+
+    try:
+        async with database.sessions()() as session:
+            if args.summary:
+                _show_summary(
+                    await queries.totals(session),
+                    await queries.caught(session, args.tenant),
+                    await queries.key_usage(session),
+                )
+            else:
+                _show_events(await queries.recent(session, args.limit, args.tenant))
+
+    except OperationalError:
+        print("The database isn't set up yet. Create it with:\n", file=sys.stderr)
+        print("    python -m alembic upgrade head", file=sys.stderr)
+        return 2
+
+    return 0
+
+
+def _show_events(events: list) -> None:
+    if not events:
+        print("Nothing recorded yet. Requests through the proxy show up here.")
+        return
+
+    print(
+        f"{'WHEN':<18}{'TENANT':<14}{'KEY':<20}{'ACTION':<9}"
+        f"{'CATEGORIES':<24}{'TOKENS':>8}{'MS':>7}"
+    )
+
+    for event in events:
+        categories = ",".join(sorted(c.category for c in event.categories)) or "-"
+        key = event.api_key.prefix if event.api_key else "-"
+        print(
+            f"{event.at.strftime('%Y-%m-%d %H:%M'):<18}"
+            f"{event.tenant.name:<14}{key:<20}{event.action:<9}"
+            f"{categories[:23]:<24}"
+            f"{event.total_tokens if event.total_tokens is not None else '-':>8}"
+            f"{event.latency_ms if event.latency_ms is not None else '-':>7}"
+        )
+
+
+def _show_summary(totals: list, caught: list, keys: list) -> None:
+    if not totals:
+        print("Nothing recorded yet. Requests through the proxy show up here.")
+        return
+
+    print(f"{'TENANT':<16}{'REQUESTS':>9}{'BLOCKED':>9}{'REDACTED':>10}{'TOKENS':>10}")
+    for name, requests, blocked, redacted, tokens in totals:
+        print(f"{name:<16}{requests:>9}{blocked:>9}{redacted:>10}{tokens:>10}")
+
+    print("\nWhat was caught:")
+    if caught:
+        for category, count in caught:
+            print(f"  {category:<16}{count:>6}")
+    else:
+        # Worth saying rather than printing an empty space: on a quiet week
+        # this is the answer, not a broken report.
+        print("  nothing")
+
+    print("\nRequests per key:")
+    for tenant, prefix, count in keys:
+        print(f"  {tenant:<16}{prefix:<20}{count:>6}")
 
 
 def _show_new_key(key: str, tenant: str, label: str) -> None:
