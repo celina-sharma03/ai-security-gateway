@@ -18,11 +18,13 @@ events and nothing else.
 """
 
 import json
+import time
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from gateway import __version__
 from gateway.console import use_utf8_output
@@ -40,6 +42,7 @@ from gateway.proxy.upstream import (
     UpstreamUnreachable,
 )
 from gateway.settings import settings
+from gateway.storage import database, events
 from gateway.storage.models import ApiKey
 
 # Uvicorn imports this module to start the server, which makes it an entry
@@ -191,6 +194,7 @@ def check(
 async def chat_completions(
     request: Request,
     key: Annotated[ApiKey, Depends(require_key)],
+    session: Annotated[AsyncSession, Depends(database.session)],
     pipeline: Annotated[Pipeline, Depends(get_pipeline)],
     upstream: Annotated[Upstream, Depends(get_upstream)],
 ) -> Response:
@@ -201,7 +205,13 @@ async def chat_completions(
     gateway that rejected a request for carrying a field it hadn't heard of
     would break working applications for no benefit. So unknown fields travel
     through untouched, and the provider validates its own requests.
+
+    The session is the same one `require_key` used -- FastAPI builds a
+    dependency once per request -- so authenticating and recording the event
+    share a connection rather than taking two.
     """
+    started = time.perf_counter()
+
     try:
         body = await request.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -237,54 +247,85 @@ async def chat_completions(
         "X-Gateway-Tenant": key.tenant.name,
     }
 
+    # From here there is one place the answer is decided and one place it is
+    # recorded, rather than a log call beside each return. Forgetting one of
+    # those is how an audit trail grows a hole that nobody notices for a month.
+    upstream_status: int | None = None
+    error: str | None = None
+
     # `action` is already mode-aware: in shadow mode the pipeline turns a block
     # into a log, so this branch is simply never taken there. The mode logic
     # lives in the pipeline and is not repeated here.
     if action is Action.BLOCK:
-        return JSONResponse(
+        response: Response = JSONResponse(
             status_code=200,
             content=provider.blocked_response(body, refusal_message(categories)),
             headers=headers,
         )
+    else:
+        # Same again: `result.text` is what the pipeline says should go onward
+        # -- the redacted text in enforce mode, the original in shadow.
+        onward = provider.with_texts(body, [r.text for r in results]) if results else body
 
-    # Same again: `result.text` is what the pipeline says should go onward --
-    # the redacted text in enforce mode, the original in shadow.
-    onward = provider.with_texts(body, [result.text for result in results]) if results else body
+        # The gateway key must not travel onward. Sending `gw_live_...` to the
+        # provider would write a working credential for this gateway into a
+        # third party's logs. Upstream puts the real provider key on instead,
+        # and strips anything else -- this is the first of those two guards.
+        outgoing = dict(request.headers)
+        if getattr(request.state, "strip_authorization", False):
+            outgoing.pop("authorization", None)
 
-    # The gateway key must not travel onward. Sending `gw_live_...` to the
-    # provider would write a working credential for this gateway into a third
-    # party's logs. Step 4 puts the real provider key here instead; until then
-    # the request goes on with no Authorization at all, which is honest -- it
-    # will be refused by anyone who needs one.
-    outgoing = dict(request.headers)
-    if getattr(request.state, "strip_authorization", False):
-        outgoing.pop("authorization", None)
+        try:
+            sent = await upstream.send("/chat/completions", onward, outgoing)
+        except UpstreamNotConfigured as exc:
+            # The operator's mistake, not the caller's, and 500 says so.
+            # Anything in the 400s would send them looking at their own request.
+            error = type(exc).__name__
+            response = JSONResponse(
+                status_code=500,
+                content=error_body(str(exc), "gateway_misconfigured"),
+                headers=headers,
+            )
+        except UpstreamTimeout as exc:
+            error = type(exc).__name__
+            response = JSONResponse(
+                status_code=504, content=error_body(str(exc), "upstream_timeout"), headers=headers
+            )
+        except UpstreamUnreachable as exc:
+            error = type(exc).__name__
+            response = JSONResponse(
+                status_code=502,
+                content=error_body(str(exc), "upstream_unreachable"),
+                headers=headers,
+            )
+        else:
+            # The provider's answer, passed back as it came: its status code,
+            # its body, its content type. A 429 stays a 429, because the caller
+            # needs the provider's answer and not one of ours on top of it.
+            upstream_status = sent.status_code
+            response = Response(
+                content=sent.body,
+                status_code=sent.status_code,
+                media_type=sent.media_type,
+                headers=headers,
+            )
 
-    try:
-        sent = await upstream.send("/chat/completions", onward, outgoing)
-    except UpstreamNotConfigured as exc:
-        # The operator's mistake, not the caller's, and 500 says so. Anything
-        # in the 400s would send them looking at their own request.
-        return JSONResponse(
-            status_code=500,
-            content=error_body(str(exc), "gateway_misconfigured"),
-            headers=headers,
-        )
-    except UpstreamTimeout as exc:
-        return JSONResponse(
-            status_code=504, content=error_body(str(exc), "upstream_timeout"), headers=headers
-        )
-    except UpstreamUnreachable as exc:
-        return JSONResponse(
-            status_code=502, content=error_body(str(exc), "upstream_unreachable"), headers=headers
-        )
-
-    # The provider's answer, passed back as it came: its status code, its body,
-    # its content type. A 429 stays a 429, because the caller needs the
-    # provider's answer and not one of ours invented on top of it.
-    return Response(
-        content=sent.body,
-        status_code=sent.status_code,
-        media_type=sent.media_type,
-        headers=headers,
+    # Written before the reply is handed back, so it costs the caller the
+    # milliseconds it takes. That is the right trade while a row is one insert
+    # next to a provider call that took half a second; if it ever stops being
+    # one, this moves to a background task with a session of its own, because
+    # a dependency's session is closed before background tasks run.
+    await events.record_safely(
+        session,
+        key=key,
+        model=body.get("model") if isinstance(body.get("model"), str) else None,
+        mode=settings.mode.value,
+        decided=decided.value,
+        action=action.value,
+        categories=categories,
+        upstream_status=upstream_status,
+        latency_ms=int((time.perf_counter() - started) * 1000),
+        error=error,
     )
+
+    return response

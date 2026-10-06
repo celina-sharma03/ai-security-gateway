@@ -27,13 +27,50 @@ just refuses to do it quietly.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, TypeDecorator
+from sqlalchemy import UniqueConstraint as Unique
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def now() -> datetime:
     """UTC, always. A gateway and its operator are rarely in the same place."""
     return datetime.now(UTC)
+
+
+class UtcDateTime(TypeDecorator):
+    """A datetime that is timezone-aware UTC on the way in and on the way out,
+    whatever the database underneath does with it.
+
+    SQLite has no timezone type: an aware datetime goes in and a naive one
+    comes back. Postgres keeps it. So without this, the same code produces
+    `datetime(2026, 10, 6, 9, 0, tzinfo=UTC)` on one machine and
+    `datetime(2026, 10, 6, 9, 0)` on another, and the first subtraction
+    between a stored value and `now()` raises:
+
+        TypeError: can't subtract offset-naive and offset-aware datetimes
+
+    Which is a particularly unpleasant bug, because it needs a *second*
+    request to appear -- the first one writes the column from None and never
+    compares anything.
+
+    Fixed here, once, rather than with a tzinfo check at every comparison,
+    because the check that gets forgotten is the one that matters.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        # Naive values are taken as UTC rather than rejected: the alternative
+        # is a gateway that refuses to record an event because of a timezone.
+        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 class Base(DeclarativeBase):
@@ -51,7 +88,7 @@ class Tenant(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=now)
 
     keys: Mapped[list["ApiKey"]] = relationship(back_populates="tenant")
     events: Mapped[list["Event"]] = relationship(back_populates="tenant")
@@ -89,9 +126,9 @@ class ApiKey(Base):
     forever.
     """
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=now)
+    last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=None)
+    revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=None)
     """Revoked, never deleted. A deleted key leaves its events pointing at
     nothing, and "which key did this come from" is exactly the question asked
     after something goes wrong."""
@@ -110,7 +147,7 @@ class Event(Base):
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    at: Mapped[datetime] = mapped_column(UtcDateTime, default=now, index=True)
 
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     api_key_id: Mapped[int | None] = mapped_column(ForeignKey("api_keys.id"), index=True)
@@ -160,7 +197,7 @@ class EventCategory(Base):
     """
 
     __tablename__ = "event_categories"
-    __table_args__ = (UniqueConstraint("event_id", "category"),)
+    __table_args__ = (Unique("event_id", "category"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)

@@ -381,3 +381,33 @@ about `httpx` being broken, and moving a dependency on a deprecation notice
 alone -- before anything needs the new one -- is how a project collects churn
 instead of features. Revisit when Starlette requires it, which the warning will
 say more loudly when it happens.
+
+## Phase 5
+
+**SQLite forgets the timezone, and the bug waits for the second request.**
+Every datetime in the schema was declared `DateTime(timezone=True)` and written
+with `datetime.now(UTC)`. SQLite has no timezone type, so an aware value goes
+in and a naive one comes back out. The first time the gateway compared a stored
+time with the current one:
+
+    TypeError: can't subtract offset-naive and offset-aware datetimes
+
+What makes it nasty is *when* it appears. The comparison lives in `touch()`,
+which updates a key's `last_used_at` at most once a minute. On the first
+request the column is None, so there is nothing to subtract and everything
+works. On the second request with the same key, every call fails. "Works once,
+then 500s forever" is a long way from the top of anyone's list of suspects.
+
+Found by a test that happened to send three requests in a row. It would have
+been found in production on the second one.
+
+The fix is a `UtcDateTime` type in models.py -- a `TypeDecorator` that forces
+aware UTC on the way in and on the way out -- used by all five datetime
+columns. Fixed once, rather than with a tzinfo check at every comparison,
+because the check that gets forgotten is the one that matters. The generated
+SQL is unchanged, so no migration was needed; `alembic check` confirms it.
+
+The wider lesson is the one DECISIONS.md already warned about in the abstract:
+"the same code runs on SQLite and Postgres" is only true while the code stays
+portable, and portability is not only about SQL syntax. The two databases
+agree about what this column *is* and disagree about what comes back out of it.
