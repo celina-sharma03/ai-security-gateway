@@ -71,6 +71,7 @@ def test_an_unknown_key_is_refused(client, stub):
 def test_a_revoked_key_is_refused(client, stub, gateway_key, file_database):
     """And is refused exactly like an unknown one. The caller learns nothing
     from the difference; the gateway's own records keep it."""
+
     async def revoke() -> None:
         engine = create_async_engine(file_database)
         async with async_sessionmaker(engine)() as session:
@@ -89,9 +90,7 @@ def test_a_revoked_key_is_refused(client, stub, gateway_key, file_database):
 
 def test_nonsense_in_the_header_is_refused(client, stub):
     for value in ("", "Bearer", "Bearer hunter2", "gw_live_but_not_bearer"):
-        response = client.post(
-            "/v1/chat/completions", json=ASK, headers={"Authorization": value}
-        )
+        response = client.post("/v1/chat/completions", json=ASK, headers={"Authorization": value})
         assert response.status_code == 401, value
 
     assert not stub.called

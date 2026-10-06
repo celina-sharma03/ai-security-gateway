@@ -30,7 +30,7 @@ CATEGORY_NAMES = {
 
 
 def describe(categories: list[str]) -> str:
-    """"a credit card number and an email address", or the raw name if it is
+    """ "a credit card number and an email address", or the raw name if it is
     a custom category an operator added in rules.yaml."""
     named = [CATEGORY_NAMES.get(category, category) for category in categories]
 

@@ -151,9 +151,11 @@ async def test_two_tenants_traffic_can_be_told_apart(db):
     await an_event(db, support, action="allow", categories=())
 
     counts = dict(
-        (await db.execute(
-            select(Tenant.name, func.count(Event.id)).join(Event).group_by(Tenant.name)
-        )).all()
+        (
+            await db.execute(
+                select(Tenant.name, func.count(Event.id)).join(Event).group_by(Tenant.name)
+            )
+        ).all()
     )
 
     assert counts == {"Billing": 2, "Support": 1}

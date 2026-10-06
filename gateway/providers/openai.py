@@ -103,9 +103,7 @@ class OpenAIProvider:
             # Not a user error -- a bug in the calling code. Loudly, because
             # quietly putting text back in the wrong message would mean
             # sending one person's data in another person's request.
-            raise ValueError(
-                f"expected {len(locations)} texts for this request, got {len(texts)}"
-            )
+            raise ValueError(f"expected {len(locations)} texts for this request, got {len(texts)}")
 
         rebuilt = copy.deepcopy(body)
         for location, text in zip(locations, texts, strict=True):
