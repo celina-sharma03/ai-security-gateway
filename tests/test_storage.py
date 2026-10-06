@@ -9,37 +9,12 @@ told apart by a query.
 """
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
-from gateway.storage.models import ApiKey, Base, Event, EventCategory, Tenant, now
+from gateway.storage.models import ApiKey, Event, EventCategory, Tenant, now
 
-
-@pytest_asyncio.fixture
-async def db():
-    """A fresh in-memory database per test.
-
-    StaticPool because every connection to `sqlite://` in memory gets its *own*
-    empty database. Without it the tables would be created on one connection
-    and the test would query a different, empty one -- a confusing failure that
-    looks like the data vanished.
-    """
-    engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
-
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-
-    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
-        yield session
-
-    await engine.dispose()
+# The `db` fixture lives in conftest.py, shared with the other storage tests.
 
 
 async def a_tenant(db, name: str = "Billing") -> Tenant:
