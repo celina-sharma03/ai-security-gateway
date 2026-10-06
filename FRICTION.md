@@ -411,3 +411,37 @@ The wider lesson is the one DECISIONS.md already warned about in the abstract:
 "the same code runs on SQLite and Postgres" is only true while the code stays
 portable, and portability is not only about SQL syntax. The two databases
 agree about what this column *is* and disagree about what comes back out of it.
+
+**A summary that made a broken deployment look healthy.** The first version of
+`gateway events --summary` reported requests, blocked, redacted and tokens. Run
+against real traffic it said:
+
+    TENANT     REQUESTS  BLOCKED  REDACTED  TOKENS
+    Billing           3        0         3       0
+    Support           5        0         5     561
+
+Billing's three requests had cost nothing, which looked like a quiet team. They
+had in fact all failed -- `UpstreamNotConfigured`, because the provider key had
+not been set in the server's terminal yet. Three of Support's five had failed
+the same way. Six broken requests out of eight, and the report showed a tidy
+table with no hint of it.
+
+Two separate mistakes, both in the last ten lines of a phase that was otherwise
+careful about this exact thing:
+
+`coalesce(sum(total_tokens), 0)` turned "nobody told us" into "it cost nothing".
+Step 6 had gone out of its way to keep None and 0 apart -- None means unknown,
+zero means the provider said zero -- and the summary threw that away at the
+point where somebody actually reads it.
+
+And there was no column for failure at all. A request that never reached the
+provider looked exactly like one that did.
+
+The fix adds FAILED, counted as our own error or a 4xx/5xx from the provider
+(a block is not a failure -- that is the gateway working), and prints `-`
+rather than `0` when no token count is known.
+
+The lesson is about where a distinction has to survive. Keeping None and zero
+apart in the database is worth nothing if the report collapses them, and the
+report is the only part anyone looks at. A careful invariant is only as good as
+its last consumer.

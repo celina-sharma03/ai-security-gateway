@@ -242,9 +242,16 @@ def _show_summary(totals: list, caught: list, keys: list) -> None:
         print("Nothing recorded yet. Requests through the proxy show up here.")
         return
 
-    print(f"{'TENANT':<16}{'REQUESTS':>9}{'BLOCKED':>9}{'REDACTED':>10}{'TOKENS':>10}")
-    for name, requests, blocked, redacted, tokens in totals:
-        print(f"{name:<16}{requests:>9}{blocked:>9}{redacted:>10}{tokens:>10}")
+    print(f"{'TENANT':<16}{'REQUESTS':>9}{'BLOCKED':>9}{'REDACTED':>10}{'FAILED':>8}{'TOKENS':>10}")
+    for name, requests, blocked, redacted, failed, tokens in totals:
+        # "-" rather than 0 when nobody reported any: 0 would be a claim about
+        # what the provider charged, and the provider was never reached.
+        counted = tokens if tokens is not None else "-"
+        print(f"{name:<16}{requests:>9}{blocked:>9}{redacted:>10}{failed:>8}{counted:>10}")
+
+    if any(row[4] for row in totals):
+        print("\n  FAILED means the request never got an answer -- our error, or")
+        print("  a 4xx/5xx from the provider. A block is not a failure.")
 
     print("\nWhat was caught:")
     if caught:

@@ -124,10 +124,85 @@ def test_the_summary_tells_the_two_tenants_apart(file_database, capsys):
     out = capsys.readouterr().out
     lines = {line.split()[0]: line.split() for line in out.splitlines() if line[:1].isalpha()}
 
-    # Billing: 2 requests, 1 blocked, 1 redacted, 60 tokens
-    assert lines["Billing"][1:5] == ["2", "1", "1", "60"]
-    # Support: 1 request, none blocked, none redacted, 20 tokens
-    assert lines["Support"][1:5] == ["1", "0", "0", "20"]
+    # requests, blocked, redacted, failed, tokens
+    assert lines["Billing"][1:6] == ["2", "1", "1", "0", "60"]
+    assert lines["Support"][1:6] == ["1", "0", "0", "0", "20"]
+
+
+def test_failed_requests_are_counted_separately(file_database, capsys):
+    """Found in real output: six requests that never reached the provider were
+    reported as ordinary traffic costing nothing, which is how a broken
+    deployment looks healthy."""
+
+    async def build() -> None:
+        engine = create_async_engine(file_database)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            _, key = await keyring.issue(session, "Billing", "CI")
+            await event_log.record(
+                session,
+                key=key,
+                model="m",
+                mode="enforce",
+                decided="redact",
+                action="redact",
+                categories=["credit_card"],
+                error="UpstreamNotConfigured",
+            )
+        await engine.dispose()
+
+    asyncio.run(build())
+
+    main(["events", "--summary"])
+
+    out = capsys.readouterr().out
+    billing = next(line.split() for line in out.splitlines() if line.startswith("Billing"))
+
+    assert billing[1:6] == ["1", "0", "1", "1", "-"]
+    assert "FAILED means" in out
+
+
+def test_a_block_is_not_counted_as_a_failure(file_database, capsys):
+    """It is the gateway working, not the request falling over."""
+    seed(file_database)
+
+    main(["events", "--summary"])
+
+    out = capsys.readouterr().out
+    billing = next(line.split() for line in out.splitlines() if line.startswith("Billing"))
+
+    assert billing[2] == "1"  # blocked
+    assert billing[4] == "0"  # failed
+
+
+def test_unknown_token_counts_are_not_reported_as_zero(file_database, capsys):
+    """Zero would be a claim about what the provider charged, and in a failed
+    request the provider was never asked."""
+
+    async def build() -> None:
+        engine = create_async_engine(file_database)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            _, key = await keyring.issue(session, "Billing", "CI")
+            await event_log.record(
+                session,
+                key=key,
+                model="m",
+                mode="enforce",
+                decided="allow",
+                action="allow",
+                categories=[],
+                error="UpstreamTimeout",
+            )
+        await engine.dispose()
+
+    asyncio.run(build())
+
+    main(["events", "--summary"])
+
+    billing = next(
+        line.split() for line in capsys.readouterr().out.splitlines() if line.startswith("Billing")
+    )
+
+    assert billing[5] == "-"
 
 
 def test_the_summary_counts_what_was_caught(file_database, capsys):

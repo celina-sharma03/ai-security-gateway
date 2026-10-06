@@ -38,19 +38,32 @@ async def recent(session: AsyncSession, limit: int = 20, tenant: str | None = No
     return list((await session.execute(query)).scalars())
 
 
-async def totals(session: AsyncSession) -> list[tuple[str, int, int, int, int]]:
-    """Per tenant: requests, blocked, redacted, tokens.
+async def totals(session: AsyncSession) -> list[tuple[str, int, int, int, int, int | None]]:
+    """Per tenant: requests, blocked, redacted, failed, tokens.
 
     This is the phase's exit criterion as a single query -- two tenants'
     traffic, told apart, with tenant labels on every row.
+
+    **Failed is counted separately, and tokens can be None.** The first version
+    of this summary had neither, and six failed requests appeared as ordinary
+    traffic that happened to cost nothing -- which is how a broken deployment
+    looks healthy in a report. A failure is a request that never got an answer:
+    our own error, or a 4xx/5xx from the provider. A block is not a failure;
+    it is the gateway working.
+
+    Tokens are deliberately not coalesced to zero. None means nobody told us,
+    and printing it as 0 would be a claim about what the provider charged.
     """
+    failed = (Event.error.is_not(None)) | (Event.upstream_status >= 400)
+
     query = (
         select(
             Tenant.name,
             func.count(Event.id),
             func.sum(case((Event.blocked, 1), else_=0)),
             func.sum(case((Event.action == "redact", 1), else_=0)),
-            func.coalesce(func.sum(Event.total_tokens), 0),
+            func.sum(case((failed, 1), else_=0)),
+            func.sum(Event.total_tokens),
         )
         .join(Event, Event.tenant_id == Tenant.id)
         .group_by(Tenant.name)
