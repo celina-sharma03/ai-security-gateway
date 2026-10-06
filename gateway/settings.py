@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     upstream_base_url: str = "https://api.openai.com/v1"
     """Where allowed requests get forwarded. Never hardcoded elsewhere."""
 
+    database_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'gateway.db'}"
+    """SQLite by default: a file, no server, nothing to install. Anyone can
+    clone this and have it running before they would have finished reading a
+    Postgres connection string.
+
+    The same code runs on Postgres by changing this one line:
+
+        postgresql+asyncpg://user:password@localhost/gateway
+
+    which is what a team with more than one gateway instance needs, because
+    two instances cannot share a SQLite file."""
+
     upstream_timeout: float = 30.0
     """Seconds to wait for the provider. Long, because a model thinking hard
     about a long prompt is normal and cutting it off would be worse than

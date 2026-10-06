@@ -14,10 +14,16 @@ uvicorn[standard]==0.54.0
 httpx==0.28.1
 
 
-# --- Phase 5: storage and auth (not yet) ---
-# SQLAlchemy
-# alembic
-# passlib[bcrypt]
+# --- Phase 5: storage ---
+SQLAlchemy[asyncio]==2.1.3
+alembic==1.20.0
+aiosqlite==0.22.1
+# asyncpg          # only needed if you point GATEWAY_DATABASE_URL at Postgres
+
+# --- Phase 5: auth (not yet) ---
+# passlib[bcrypt]          # for dashboard logins in Phase 9, not for API keys:
+#                          # an API key is 32 random bytes, so a deliberately
+#                          # slow hash would buy nothing and be paid per request
 # python-jose[cryptography]
 # structlog
 
