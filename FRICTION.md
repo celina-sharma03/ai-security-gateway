@@ -445,3 +445,35 @@ The lesson is about where a distinction has to survive. Keeping None and zero
 apart in the database is worth nothing if the report collapses them, and the
 report is the only part anyone looks at. A careful invariant is only as good as
 its last consumer.
+
+## Phase 6
+
+**A blank line in a config file is not an empty value.** Writing
+`.env.example` meant writing lines like:
+
+    GATEWAY_UPSTREAM_API_KEY=
+
+which is what anyone copying the file would leave behind until they filled it
+in. The gateway read that as a key -- an empty one. `upstream_api_key` became
+`SecretStr('')`, which is not None, so every check for "is a provider key
+configured" said yes.
+
+The result would have been the gateway sending `Authorization: Bearer ` to the
+provider, the provider answering 401, and whoever read that 401 spending an
+hour on a provider key that was never the problem -- instead of seeing the
+gateway say plainly that it has no key, which it is already written to do.
+
+Worse in the other direction too: a blank `GATEWAY_MODE=` failed validation
+outright, so a line nobody meant to write stopped the gateway with a pydantic
+traceback.
+
+The fix is one `model_validator(mode="before")` that drops any setting whose
+value is an empty string, so blank means "not filled in" for every setting at
+once, and nonsense still means nonsense -- `GATEWAY_MODE=enforc` is still an
+error.
+
+What is worth noticing is where this came from. It was not found by a test or
+by using the gateway; it was found by **writing the documentation**, because
+writing down what someone would copy meant looking at what they would copy it
+into. Phase 6 is supposed to be about explaining a finished thing, and the
+first hour of it found a bug in the thing.

@@ -6,7 +6,7 @@ Anything configurable lives here. Nothing reads os.environ directly.
 from enum import Enum
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -32,6 +32,33 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_means_unset(cls, values: object) -> object:
+        """A variable left empty means "I have not filled this in".
+
+        Found while writing .env.example. Someone copies it, leaves
+
+            GATEWAY_UPSTREAM_API_KEY=
+
+        and without this the gateway reads that as a key -- an empty one. It
+        then believes it is configured, sends `Authorization: Bearer ` to the
+        provider, and the provider answers 401. Whoever reads that 401 spends
+        an hour on a provider key that was never the problem, instead of
+        seeing the gateway say plainly that it has no key.
+
+        The same applies to every other setting: a blank GATEWAY_MODE should
+        fall back to the default, not fail validation with a pydantic
+        traceback on a line nobody meant to write.
+        """
+        if isinstance(values, dict):
+            return {
+                name: value
+                for name, value in values.items()
+                if not (isinstance(value, str) and not value.strip())
+            }
+        return values
 
     mode: Mode = Mode.SHADOW
     """Starts in shadow so a fresh install can never break anything."""
