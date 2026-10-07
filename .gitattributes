@@ -1,0 +1,26 @@
+# Line endings, decided here rather than by whoever cloned the repo.
+#
+# Git on Windows checks files out with CRLF by default. For Python and Markdown
+# that is harmless. For a shell script copied into a Linux container it is not:
+#
+#     exec ./docker-entrypoint.sh: no such file or directory
+#
+# The file is plainly there. The error is about `#!/bin/sh\r` -- Linux looks
+# for an interpreter whose name ends in a carriage return, and does not find
+# one. The message names the wrong file, which is why this costs people an
+# afternoon rather than a minute.
+#
+# Demonstrated, not assumed: cloning this repo on Windows and running
+# `docker compose up` produced exactly that error before this file existed.
+
+* text=auto
+
+# Anything Linux executes keeps LF, whatever the host prefers.
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Not executed, but read by tools that are fussier than they should be.
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
