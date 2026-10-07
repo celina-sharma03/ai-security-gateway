@@ -164,6 +164,17 @@ docker compose logs -f
 Rules are mounted read-only from `gateway/config/rules.yaml`, so you can edit
 them without rebuilding — they are read at startup, so restart to apply them.
 
+**Your shell overrides `.env`.** If `GATEWAY_MODE` is set in the terminal you
+run `docker compose up` from, the container uses that and ignores the file. To
+see what a run will actually use before starting it:
+
+```bash
+docker compose config
+```
+
+The startup banner reports the mode, the upstream and whether a provider key is
+set, so the container always says what it ended up with.
+
 ## Development
 
 Requires Python 3.12+. On Windows use `py`; `python` may not be on PATH.

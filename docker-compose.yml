@@ -4,6 +4,16 @@
 #
 # Settings come from a .env file beside this one -- copy .env.example. Compose
 # reads it automatically for the ${...} substitutions below.
+#
+# **Your shell wins over that file.** If GATEWAY_MODE is set in the terminal
+# you run this from, the container gets that value and .env is ignored for it.
+# Convenient for one-off runs, and surprising the first time: a container
+# started in shadow mode on one machine comes up in enforce on another, with
+# the same .env and the same image.
+#
+# To see what a run will actually use, before starting it:
+#
+#     docker compose config
 
 services:
   gateway:
