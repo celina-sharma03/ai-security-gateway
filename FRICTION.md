@@ -552,3 +552,44 @@ container start.
 The broader lesson for this phase: **you cannot test a clean-machine
 experience from the machine that built it.** Every check up to this point had
 been run from a working tree that was never going to show the problem.
+
+**The clean-machine test, and what it found.** Phase 6 exists for one
+sentence in DECISIONS.md: *someone follows the instructions on a clean machine
+without asking a single question.* So: clone from GitHub into an empty
+directory, build a new virtualenv, and run every command in the README in
+order, without using anything already on this machine.
+
+Every command worked. 458 tests passed, the lint was clean, the server came
+up, `/health` and `/` answered, the migration created the database, a key was
+issued and the configuration printed. Nothing was broken.
+
+**But a stranger would still have failed at the first command**, because the
+README said this near the top:
+
+    .venv/Scripts/python.exe -m gateway check "my card is ..."
+
+and explained how to create `.venv` a hundred and twenty lines further down,
+under "Development". Somebody who has just cloned the repository has no
+virtualenv. Their first attempt produces a file-not-found error, and they are
+reading a README that looks like it was written for somebody who already had
+it working.
+
+That is the whole lesson of the test. It did not find a broken command. It
+found a **broken order**, which is invisible to everyone who already has the
+project set up -- which is everyone who writes a README.
+
+Fixed by moving a complete "Try it in two minutes" section to the top: clone,
+venv, install, migrate, run. Every line of it copied from the clean-room
+session rather than written from memory.
+
+**Also found: Windows' 260-character path limit.** The first clean-room
+attempt went into a deep temporary directory and `pip install` failed with
+
+    OSError: [Errno 2] No such file or directory:
+      ...\site-packages\openai\types\beta\realtime\
+      conversation_item_input_audio_transcription_completed_event.py
+
+about a file pip was *creating*. The same misleading-message pattern as the
+CRLF bug: the error names a missing file when the real problem is a limit
+being hit. Not the project's fault, and still worth a line in the README,
+because a clone inside `OneDrive\Documents\Projects\...` hits exactly this.

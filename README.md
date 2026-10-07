@@ -24,18 +24,46 @@ to your provider, and records what happened without recording what was said.
 Still to come: prompt-injection detection, a dashboard, and streaming (V2). See
 [DECISIONS.md](DECISIONS.md) for the plan.
 
-Try it without a provider, an account or a key:
+---
+
+## Try it in two minutes
+
+No provider, no account, no API key. Python 3.12 or newer — on Windows use
+`py`, because `python` is often not on PATH.
 
 ```bash
+git clone https://github.com/celina-sharma03/ai-security-gateway.git
+cd ai-security-gateway
+
+py -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+.venv/Scripts/python.exe -m alembic upgrade head
+
 .venv/Scripts/python.exe -m gateway check "my card is 4111 1111 1111 1111" --mode enforce
 ```
 
-Or run the proxy and ask it what it sees:
+```
+found     redact   what the checks asked for
+done      redact   what actually happened
+
+sent onward:
+  my card is [CREDIT_CARD_1]
+```
+
+Then run the proxy itself:
 
 ```bash
 .venv/Scripts/python.exe -m gateway serve
-# then, in a browser: http://127.0.0.1:8080/docs
+# http://localhost:8080/docs
 ```
+
+On macOS and Linux the venv binary is `.venv/bin/python` instead. There is also
+[a container](#running-it-with-docker), which needs no Python at all.
+
+> **Clone somewhere with a short path on Windows.** Python packages nest
+> deeply, and a clone inside a long folder path can exceed Windows' 260
+> character limit — `pip install` then fails with
+> `OSError: No such file or directory` about a file it is *creating*.
 
 ---
 
@@ -177,12 +205,9 @@ set, so the container always says what it ended up with.
 
 ## Development
 
-Requires Python 3.12+. On Windows use `py`; `python` may not be on PATH.
+Set up as in [Try it in two minutes](#try-it-in-two-minutes), then:
 
 ```bash
-py -m venv .venv
-.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
-
 .venv/Scripts/python.exe -m alembic upgrade head   # create the database
 .venv/Scripts/python.exe -m gateway                # show the configuration
 .venv/Scripts/python.exe -m gateway serve          # run the proxy
