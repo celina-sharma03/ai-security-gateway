@@ -1,16 +1,27 @@
+# What never belongs in the image.
+
+# Secrets and local state. The .env is read by compose on the host, not baked
+# into the image -- a key in an image layer is a key in every copy of it.
+.env*
+!.env.example
+*.db
+*.sqlite3
+rules.local.yaml
+
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-.mypy_cache/
 .ruff_cache/
+.mypy_cache/
+
 .git/
-.env
-*.db
-*.sqlite3
-eval/
+.github/
+
+# Not needed to run the gateway, and each one is another reason to rebuild.
 tests/
+eval/
+dashboard/
 docs/
-dashboard/node_modules/
-DECISIONS.md
-FRICTION.md
+examples/
+*.md

@@ -477,3 +477,48 @@ by using the gateway; it was found by **writing the documentation**, because
 writing down what someone would copy meant looking at what they would copy it
 into. Phase 6 is supposed to be about explaining a finished thing, and the
 first hour of it found a bug in the thing.
+
+**"It works" -- but it was the wrong server answering.** The container was
+built and started, and a `curl http://127.0.0.1:8080/health` from the host
+came back `200 {"status":"ok","mode":"enforce"}`. Proof it worked, except for
+one detail: the container's own startup banner two lines earlier said
+`mode: shadow`.
+
+A process cannot disagree with itself about its own mode. Something else was
+answering:
+
+    Get-NetTCPConnection -LocalPort 8080
+
+    39040 wslrelay            <- Docker
+    22756 com.docker.backend  <- Docker
+    15704 python              <- a `gateway serve` left running from an hour ago
+
+Windows let both bind, and the local Python server won the race for the reply.
+Every "verification" of the container through that port had actually been a
+test of a server that was never containerised.
+
+The real test ran inside the container, where there is nothing else to confuse
+it with:
+
+    docker compose exec gateway python -c "...urlopen('http://127.0.0.1:8080/health')..."
+
+and that one reported shadow mode, with redaction working, which is what the
+container was configured for.
+
+The lesson is cheap to state and easy to forget: **a passing check proves
+something answered, not that the thing you built answered.** Anything reached
+over a shared port needs an identifying fact in the reply -- a mode, a version,
+a container id -- before the result means anything. The banner is what caught
+this, and only because it had been written to report the mode rather than just
+say "started".
+
+Two smaller things fell out of the same session. The banner printed
+`http://0.0.0.0:8080/docs` as somewhere to go; 0.0.0.0 is a bind address
+meaning "every address on this machine", not a destination, and inside a
+container it is meaningless from outside. It now prints localhost in the links
+and keeps 0.0.0.0 only on the "listening on" line, where it is the truth.
+
+And the Dockerfile's `COPY requirements.txt` before `COPY gateway/` is not
+tidiness: Docker caches each layer, so putting dependencies first is the
+difference between a two-second rebuild and a two-minute one every time a
+Python file changes.

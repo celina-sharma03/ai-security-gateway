@@ -146,9 +146,15 @@ def _serve(host: str, port: int, *, reload: bool) -> None:
         print("  GATEWAY_PASSTHROUGH_PROVIDER_KEY=true.")
         print()
 
-    print(f"  listening on  http://{host}:{port}")
-    print(f"  point a client's base_url at  http://{host}:{port}/v1")
-    print(f"  or try it in a browser:       http://{host}:{port}/docs")
+    # 0.0.0.0 means "every address on this machine". It is a bind address, not
+    # somewhere you can go: pasting http://0.0.0.0:8080 into a browser works on
+    # some systems and not others, and in a container it is meaningless from
+    # outside. The usable URL is localhost.
+    reachable = "localhost" if host in ("0.0.0.0", "::", "") else host
+
+    print(f"  listening on  {host}:{port}")
+    print(f"  point a client's base_url at  http://{reachable}:{port}/v1")
+    print(f"  or try it in a browser:       http://{reachable}:{port}/docs")
     print()
 
     uvicorn.run("gateway.proxy.app:app", host=host, port=port, reload=reload)

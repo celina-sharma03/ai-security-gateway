@@ -1,17 +1,42 @@
-# One command to run it: docker compose up
+# One command to run it:
+#
+#     docker compose up
+#
+# Settings come from a .env file beside this one -- copy .env.example. Compose
+# reads it automatically for the ${...} substitutions below.
 
 services:
   gateway:
     build: .
     ports:
       - "8080:8080"
+
     environment:
-      # Starts in shadow mode: checks everything, changes nothing.
-      # Switch to "enforce" once you've read a week of logs.
-      GATEWAY_MODE: shadow
-      GATEWAY_HOST: 0.0.0.0
-      GATEWAY_PORT: 8080
-      GATEWAY_UPSTREAM_BASE_URL: https://api.openai.com/v1
+      # Shadow mode checks everything and changes nothing. Switch to "enforce"
+      # once you have read a week of `gateway events --summary`.
+      GATEWAY_MODE: ${GATEWAY_MODE:-shadow}
+
+      GATEWAY_UPSTREAM_BASE_URL: ${GATEWAY_UPSTREAM_BASE_URL:-https://api.openai.com/v1}
+
+      # The provider key the gateway holds, so developers never need one.
+      # Empty is fine and means "not set" -- the gateway will say so plainly
+      # rather than sending an empty credential to the provider.
+      GATEWAY_UPSTREAM_API_KEY: ${GATEWAY_UPSTREAM_API_KEY:-}
+
+      GATEWAY_PASSTHROUGH_PROVIDER_KEY: ${GATEWAY_PASSTHROUGH_PROVIDER_KEY:-false}
+
     volumes:
-      # Rules are editable without rebuilding the image.
+      # Keys and events outlive the container. Rebuilding the image must not
+      # throw away the record of who sent what.
+      - gateway-data:/data
+
+      # Rules are editable without rebuilding. Read-only, because a gateway
+      # that can rewrite its own rules file is a gateway whose rules cannot be
+      # trusted. Changes take effect on restart -- rules are read once, at
+      # startup.
       - ./gateway/config/rules.yaml:/app/gateway/config/rules.yaml:ro
+
+    restart: unless-stopped
+
+volumes:
+  gateway-data:

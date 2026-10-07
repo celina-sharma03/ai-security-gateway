@@ -195,3 +195,17 @@ def test_a_missing_database_says_how_to_create_it(tmp_path, monkeypatch, capsys)
     assert "alembic upgrade head" in capsys.readouterr().err
 
     asyncio.run(database.reset())
+
+
+def test_a_bind_address_is_not_printed_as_a_link(monkeypatch, capsys):
+    """0.0.0.0 means "every address on this machine" -- a bind address, not
+    somewhere to go. The container prints it, and pasting it into a browser
+    works on some systems and not others. The usable URL is localhost."""
+    _fake_uvicorn(monkeypatch)
+
+    main(["serve", "--host", "0.0.0.0", "--port", "8080"])
+
+    out = capsys.readouterr().out
+    assert "listening on  0.0.0.0:8080" in out
+    assert "http://localhost:8080/v1" in out
+    assert "http://0.0.0.0:8080" not in out
