@@ -8,8 +8,12 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# Secrets and local config
-.env
+# Secrets and local config.
+# .env* catches .env.local, .env.probe and anything else a debugging
+# session leaves behind -- a .env.probe was committed once, by a command
+# whose cleanup line never ran because an earlier line failed.
+.env*
+!.env.example
 *.local.yaml
 
 # Data
