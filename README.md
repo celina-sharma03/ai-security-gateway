@@ -144,6 +144,26 @@ haven't seen work.
 
 ---
 
+## Running it with Docker
+
+```bash
+cp .env.example .env     # then put your provider key in it
+docker compose up
+```
+
+That builds the image, creates the database, and starts the gateway on
+http://localhost:8080. The database lives on a volume, so rebuilding the image
+does not throw away your keys or your event history.
+
+```bash
+docker compose exec gateway python -m gateway keys create --tenant "Billing" --label "laptop"
+docker compose exec gateway python -m gateway events --summary
+docker compose logs -f
+```
+
+Rules are mounted read-only from `gateway/config/rules.yaml`, so you can edit
+them without rebuilding — they are read at startup, so restart to apply them.
+
 ## Development
 
 Requires Python 3.12+. On Windows use `py`; `python` may not be on PATH.

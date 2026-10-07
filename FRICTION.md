@@ -522,3 +522,33 @@ And the Dockerfile's `COPY requirements.txt` before `COPY gateway/` is not
 tidiness: Docker caches each layer, so putting dependencies first is the
 difference between a two-second rebuild and a two-minute one every time a
 Python file changes.
+
+**`exec ./docker-entrypoint.sh: no such file or directory`, about a file that
+is plainly there.** Cloning this repo on Windows and running `docker compose
+up` produced that, every time, on a container that had just been built
+successfully from the same files.
+
+Git on Windows checks text files out with CRLF. For Python and Markdown that
+is harmless. For a shell script copied into a Linux container it is not: the
+shebang becomes `#!/bin/sh\r`, and Linux goes looking for an interpreter whose
+name ends in a carriage return. There isn't one.
+
+**The error names the wrong file.** It says the script is missing, when the
+script is fine and the interpreter is the thing that cannot be found. That one
+detail is why this costs people an afternoon instead of a minute -- every
+instinct says to check the path, the COPY, the permissions, the working
+directory.
+
+It was found the only way it could be: by cloning the repo into a temporary
+directory, building the image from *that* clone, and running it. The build on
+the machine where the file was written works perfectly, because the file in
+the working tree still has LF. The bug exists only for whoever clones it next
+-- which, for a project about to be made public, is everyone.
+
+`.gitattributes` now pins LF on shell scripts, the Dockerfile, and the YAML and
+TOML that tooling reads. Verified by cloning again afterwards and watching the
+container start.
+
+The broader lesson for this phase: **you cannot test a clean-machine
+experience from the machine that built it.** Every check up to this point had
+been run from a working tree that was never going to show the problem.
