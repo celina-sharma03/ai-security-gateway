@@ -271,8 +271,8 @@ Two things left open by Phase 5, both deliberate:
 - **A failed authentication is not recorded.** Auth happens before the route runs, so there is no tenant to attribute the attempt to, and `events` requires one. Someone guessing keys is currently invisible. It needs either a nullable tenant on events or a table of its own, and the decision belongs with the dashboard.
 - **`/health`, `/` and `/check` need no key.** `/check` is the demo — requiring a key would mean nobody can try the thing before deciding to run it — but a deployment that wants them private has no way to say so yet.
 
-**6 — Docs, then ship V1.**
-*Exit: someone follows the instructions on a clean machine without asking a single question.*
+**6 — Docs, then ship V1.** A licence, a configuration reference, a guide to the rules file, an honest page of what the gateway does *not* protect against, and a container that runs it.
+*Exit: someone follows the instructions on a clean machine without asking a single question.* **Met**, by cloning from GitHub into an empty directory on 9 October 2026 and running every command in the README. All of them worked — and the test still found a failure, because the first command in the README needed a virtualenv the README explained a hundred and twenty lines later. A broken order rather than a broken command, invisible to anyone who already had it working.
 
 ### V2 — "it catches attacks and shows you"
 

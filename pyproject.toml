@@ -1,6 +1,6 @@
 [project]
 name = "ai-security-gateway"
-version = "0.4.0"  # keep in step with gateway/__init__.py, which is what runs
+version = "1.0.0"  # keep in step with gateway/__init__.py, which is what runs
 description = "A self-hosted proxy that redacts secrets and blocks prompt attacks before they reach an LLM provider."
 requires-python = ">=3.12"
 

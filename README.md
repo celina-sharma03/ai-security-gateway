@@ -17,12 +17,15 @@ already going there.
 
 ## Status
 
-**Phase 5 of 10 — a working proxy that knows whose traffic is whose.** It finds
-and redacts personal data and secrets — cards, API keys, passwords, emails,
-phone numbers, Aadhaar, PAN, IP addresses and UPI IDs — forwards what is left
-to your provider, and records what happened without recording what was said.
-Still to come: prompt-injection detection, a dashboard, and streaming (V2). See
-[DECISIONS.md](DECISIONS.md) for the plan.
+**V1 — it stops secrets leaking.** It finds and redacts personal data and
+secrets — cards, API keys, passwords, emails, phone numbers, Aadhaar, PAN, IP
+addresses and UPI IDs — forwards what is left to your provider, and records
+what happened without recording what was said. It holds the provider key, so
+there is nothing on a developer's machine to route around it with.
+
+Next, in V2: prompt-injection detection, streaming, and a dashboard. The plan
+is in [DECISIONS.md](DECISIONS.md), and everything V1 does **not** protect
+against is in [docs/what-it-protects.md](docs/what-it-protects.md).
 
 ---
 
