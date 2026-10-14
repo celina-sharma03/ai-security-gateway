@@ -6,6 +6,7 @@ answer is, so Phase 2 has a target to hit.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 
@@ -22,6 +23,12 @@ HOLDOUT_FILE = DATA_DIR / "holdout.yaml"
 #: because these are what the thresholds get tuned against and a reader has
 #: to be able to see them.
 INJECTION_POSITIVE_FILE = DATA_DIR / "injection_positive.yaml"
+
+#: Legitimate requests that resemble attacks. The more important of the two
+#: files: a missed injection is bad, a blocked support agent uninstalls the
+#: gateway. Each case names the family it is a near-miss for, so false alarms
+#: can be reported per family instead of as one average.
+INJECTION_NEGATIVE_FILE = DATA_DIR / "injection_negative.yaml"
 
 #: Every family an attack is allowed to declare. A misspelled family would
 #: silently create a seventh family of one case and leave a real one
@@ -136,6 +143,11 @@ class Attack:
     note: str | None = None
     tricky: bool = False
 
+    #: On a benign case, the family it is a near-miss for. Never shown to
+    #: the detector -- it exists so a false alarm can be attributed to the
+    #: threshold that caused it.
+    looks_like: str | None = None
+
     @property
     def should_flag(self) -> bool:
         return self.family is not None
@@ -154,6 +166,7 @@ def _load_attacks(path: Path) -> list[Attack]:
             family=case.get("family"),
             note=case.get("note"),
             tricky=bool(case.get("tricky", False)),
+            looks_like=case.get("looks_like"),
         )
         for case in raw["cases"]
     ]
@@ -164,20 +177,49 @@ def load_attacks() -> list[Attack]:
     return _load_attacks(INJECTION_POSITIVE_FILE)
 
 
-def attack_summary() -> list[tuple[str, int, int]]:
-    """Per family: how many cases, and how many of those a keyword list
-    cannot catch. Reported separately because an overall score on this set
-    could be carried entirely by the famous phrasings."""
+def load_benign() -> list[Attack]:
+    """Legitimate requests that resemble attacks, every one of which must
+    pass through."""
+    return _load_attacks(INJECTION_NEGATIVE_FILE)
+
+
+class FamilyCounts(NamedTuple):
+    """One row of the per-family summary.
+
+    Named rather than a bare tuple because adding the near-miss count to a
+    three-element tuple broke every caller that unpacked it positionally, in
+    four places, for no reason other than the shape. Attribute access does
+    not care how many fields there are.
+    """
+
+    family: str
+    attacks: int
+    tricky: int
+    near_misses: int
+
+
+def attack_summary() -> list[FamilyCounts]:
+    """Per family: attacks, how many of those a keyword list cannot catch,
+    and how many benign cases are near-misses for it.
+
+    Three numbers rather than one, because an overall score on this set could
+    be carried entirely by the famous phrasings, and because a family with no
+    near-misses is a family where a high catch rate costs nothing -- which is
+    not the situation the gateway is actually in.
+    """
     attacks = load_attacks()
+    benign = load_benign()
+
     rows = [
-        (
-            family,
-            sum(1 for a in attacks if a.family == family),
-            sum(1 for a in attacks if a.family == family and a.tricky),
+        FamilyCounts(
+            family=family,
+            attacks=sum(1 for a in attacks if a.family == family),
+            tricky=sum(1 for a in attacks if a.family == family and a.tricky),
+            near_misses=sum(1 for b in benign if b.looks_like == family),
         )
         for family in sorted(KNOWN_FAMILIES)
     ]
-    return sorted(rows, key=lambda row: -row[1])
+    return sorted(rows, key=lambda row: -row.attacks)
 
 
 def summary() -> dict[str, int]:

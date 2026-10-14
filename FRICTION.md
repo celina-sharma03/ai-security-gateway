@@ -599,9 +599,9 @@ because a clone inside `OneDrive\Documents\Projects\...` hits exactly this.
 ## Phase 7
 
 **The attack set would not write itself from the shell.** The file is 300
-lines of YAML whose notes are written in English, so it is full of
-apostrophes -- "the model cannot tell whose turn this is", "do not break
-character". Writing it with a heredoc failed:
+lines of YAML whose notes and cases are written in English, so the first
+draft was full of apostrophes -- "it's urgent", "Let's play a game", "write
+the chatbot's lines". Writing it with a heredoc failed:
 
     /usr/bin/bash: -c: line 174: unexpected EOF while looking for matching `''
 
@@ -616,12 +616,16 @@ because their apostrophes happened to pair up.
 The lesson is not about quoting rules. It is that **the error pointed at the
 wrong place**, which is now the third time in this project: the CRLF bug
 reported a missing file that existed, the 260-character limit reported a
-missing file it was in the middle of creating, and this one reported line 174
-of a problem on line 31. The fix each time came from asking what the message
-could be a *symptom* of, not from looking harder at where it pointed.
+missing file it was in the middle of creating, and this one reported the end
+of the file when the earliest apostrophe was sixty lines in -- and when,
+strictly, there was no single culprit line at all, because what breaks it is
+an odd *total*. The fix each time came from asking what the message could be
+a *symptom* of, not from looking harder at where it pointed.
 
 Fixed by writing the file directly instead of through a shell, which is also
-the right answer for any file that contains prose.
+the right answer for any file that contains prose. The apostrophes that
+caused it are gone from the file too -- not to work around the shell, but
+because "it is urgent" reads the same and the case is data, not writing.
 
 **Guarding data you cannot see.** The hardest attack in the set is this one:
 
@@ -634,3 +638,20 @@ file would look different afterwards. There is now a test asserting that a
 real U+200B is present and that no `\u200b` got stored as six literal
 characters -- the only kind of test that can notice a character you cannot
 see.
+
+**A tuple that grew a field broke four tests.** The per-family summary
+returned `(family, attacks, tricky)`, and every caller unpacked it
+positionally. Adding the near-miss count made it a four-tuple, and four
+places failed at once with
+
+    ValueError: not enough values to unpack (expected 3, got 4)
+
+None of them were wrong about anything. They were wrong about the *shape*,
+which is a kind of coupling that gets paid for every time the shape changes.
+Fixed by making it a NamedTuple and reading `row.attacks` instead of
+unpacking, so a fifth field can be added without touching a single caller.
+
+Worth noticing that the tests failed for the right reason here: they were
+guarding the data, and they broke because the plumbing under them moved, not
+because the data was wrong. The temptation was to edit the four unpackings
+and move on. That would have left the next field to break them again.

@@ -12,6 +12,7 @@ from eval.dataset import (
     attack_summary,
     load_all,
     load_attacks,
+    load_benign,
     load_holdout,
     load_negative,
     load_positive,
@@ -133,16 +134,16 @@ def test_families_are_spelled_correctly():
 def test_every_known_family_has_cases():
     """A family worth naming is a family worth testing. Four cases is the
     floor at which a per-family score means anything at all."""
-    for family, total, _ in attack_summary():
-        assert total >= 4, f"{family} has only {total} cases"
+    for row in attack_summary():
+        assert row.attacks >= 4, f"{row.family} has only {row.attacks} cases"
 
 
 def test_every_family_has_a_tricky_case():
     """The point of the embedding model is the attacks a keyword list misses.
     A family made only of famous phrasings would be a family where patterns
     score 100% and nothing has been learned."""
-    for family, _, hard in attack_summary():
-        assert hard >= 1, f"{family} has no case a keyword list would miss"
+    for row in attack_summary():
+        assert row.tricky >= 1, f"{row.family} has no case a keyword list would miss"
 
 
 def test_most_attacks_are_tricky():
@@ -166,6 +167,57 @@ def test_no_duplicate_attacks():
 def test_no_attack_is_empty():
     for attack in load_attacks():
         assert attack.text.strip(), "an attack has no text"
+
+
+def test_benign_set_loads():
+    assert load_benign()
+
+
+def test_no_benign_case_declares_a_family():
+    for case in load_benign():
+        assert not case.should_flag, f"benign case expects a catch: {case.text!r}"
+
+
+def test_near_miss_families_are_spelled_correctly():
+    """`looks_like` is only useful if it matches a real family. A typo would
+    silently move a false alarm into a family that does not exist, and the
+    report would show the threshold as costing nothing."""
+    for case in load_benign():
+        if case.looks_like is not None:
+            assert case.looks_like in KNOWN_FAMILIES, f"unknown family {case.looks_like!r}"
+
+
+def test_every_family_has_near_misses():
+    """A family with no near-misses is a family where catching everything
+    costs nothing -- which is never true in reality, only in a test set that
+    has not been written carefully."""
+    for row in attack_summary():
+        assert row.near_misses >= 3, f"{row.family} has only {row.near_misses} near-misses"
+
+
+def test_benign_cases_outnumber_attacks():
+    """False alarms are the failure mode that gets a gateway uninstalled, so
+    the set guarding against them is the bigger one. Same rule as the PII
+    files, and it matters more here, because the overlap is worse."""
+    assert len(load_benign()) >= len(load_attacks())
+
+
+def test_nothing_is_in_both_files():
+    """The same text cannot be both an attack and legitimate. If it is, one
+    of the two files is wrong and every score is unreliable."""
+    attacks = {" ".join(a.text.split()) for a in load_attacks()}
+    for case in load_benign():
+        text = " ".join(case.text.split())
+        assert text not in attacks, f"case appears on both sides: {case.text!r}"
+
+
+def test_most_benign_cases_are_near_misses():
+    """A negative set full of "what is the weather" would pass any threshold
+    and prove nothing. The ones that matter are the ones that share their
+    words with an attack."""
+    benign = load_benign()
+    hard = sum(1 for b in benign if b.tricky)
+    assert hard >= len(benign) * 0.5, f"only {hard} of {len(benign)} are near-misses"
 
 
 def test_the_obfuscated_cases_survived_being_written_down():

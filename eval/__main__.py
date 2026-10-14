@@ -16,6 +16,7 @@ from eval.dataset import (
     attack_summary,
     load_all,
     load_attacks,
+    load_benign,
     load_holdout,
     load_negative,
     load_positive,
@@ -45,28 +46,45 @@ def show_cases(cases: list) -> None:
             print(f"        -- {case.note}")
 
 
+def _show_attacks(cases: list, *, label: str) -> None:
+    print(f"\n{label}\n")
+    for case in cases:
+        print(f"  {'hard' if case.tricky else '    '}  {case}")
+        if case.note:
+            print(f"          -- {case.note}")
+
+
 def show_injection(*, every: bool) -> None:
     attacks = load_attacks()
-    tricky = sum(1 for a in attacks if a.tricky)
+    benign = load_benign()
 
-    print(f"Prompt-injection attack set -- {len(attacks)} attacks, {tricky} of them tricky")
-    print("(tricky means a keyword list cannot catch it)\n")
+    print("Prompt-injection set")
+    print(f"  must be caught:   {len(attacks):>3}   ({sum(1 for a in attacks if a.tricky)} tricky)")
+    print(f"  must pass:        {len(benign):>3}   ({sum(1 for b in benign if b.tricky)} tricky)")
+    print("\n(tricky means it shares its vocabulary with the other side of the set)\n")
 
-    print(f"  {'FAMILY':<22}{'CASES':>6}{'TRICKY':>8}")
-    for family, total, hard in attack_summary():
-        print(f"  {family:<22}{total:>6}{hard:>8}")
+    print(f"  {'FAMILY':<22}{'ATTACKS':>8}{'TRICKY':>8}{'NEAR-MISSES':>13}")
+    for row in attack_summary():
+        print(f"  {row.family:<22}{row.attacks:>8}{row.tricky:>8}{row.near_misses:>13}")
+
+    unattributed = sum(1 for b in benign if b.looks_like is None)
+    print(f"  {'(ordinary traffic)':<22}{'':>8}{'':>8}{unattributed:>13}")
 
     if not every:
-        print("\nRun with --all to read every attack.")
+        print("\nRun with --all to read every case.")
         return
 
-    for family, _, _ in attack_summary():
-        print(f"\n{family}\n")
-        for attack in attacks:
-            if attack.family == family:
-                print(f"  {'hard' if attack.tricky else '    '}  {attack}")
-                if attack.note:
-                    print(f"          -- {attack.note}")
+    for row in attack_summary():
+        mine = [a for a in attacks if a.family == row.family]
+        _show_attacks(mine, label=f"ATTACK -- {row.family}")
+
+    print("\n" + "=" * 70)
+    for row in attack_summary():
+        near = [b for b in benign if b.looks_like == row.family]
+        if near:
+            _show_attacks(near, label=f"MUST PASS -- looks like {row.family}")
+    ordinary = [b for b in benign if b.looks_like is None]
+    _show_attacks(ordinary, label="MUST PASS -- ordinary traffic")
 
 
 def main() -> None:
