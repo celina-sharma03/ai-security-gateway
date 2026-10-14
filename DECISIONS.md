@@ -94,6 +94,22 @@ Built in V2, but the token columns go into the schema from the first migration.
 
 **One engine serves every semantic category.** Prompt injection and malware-rephrase detection are the same machinery — take incoming text, compare it semantically against known-bad examples. Same scoring, same thresholds. Only the examples in the config differ. Building injection detection *is* building the rephrase detector; adding malware afterwards is adding a category to a YAML file, not writing code.
 
+**Injection detection is patterns plus embeddings, measured against an off-the-shelf classifier.** Patterns catch the phrasings that are literally famous — *"ignore all previous instructions"* — and cost microseconds. Embeddings catch the paraphrases, which is the whole reason patterns are not enough: an attacker who reads our rules file writes the same attack in different words. `all-MiniLM-L6-v2` is about 80MB and runs on a CPU, so the gateway stays something you can run on a small box, and it fits the engine already decided above — examples in YAML, scored by similarity.
+
+A purpose-built classifier is the measuring stick, not the plan. Those models are around 700MB and exist for exactly this job, so if one beats our approach by a wide margin that is a fact worth publishing rather than hiding. The comparison is in the exit criteria this time, not in the prose, because that is how the Presidio comparison got missed twice.
+
+**Three data sources, and only one of them is committed.** Hand-written attacks grouped by family — instruction override, role-play, encoding, context-stuffing, indirect injection — live in the repository, because they are what the thresholds get tuned against and a reader has to be able to see them. Public jailbreak datasets are fetched by a script into a gitignored folder, because they are large and other people's licences are not ours to re-publish. And the holdout cases are written separately, afterwards, by hand.
+
+The negative set matters more here than it did for PII. *"How do I stop prompt injection in my own app?"* is a security question, not an attack; so is a novelist asking for a villain's dialogue. A detector that blocks those is worse than no detector, because the people it annoys are the people who chose to install it.
+
+**The semantic check reads the first three windows and no further.** MiniLM reads about 256 word-pieces at a time, so a long prompt has to be cut into windows and scored one at a time. The cap is three — roughly the first 600 words, embedded as one batch for about 25-30ms — and patterns still run over the whole text, so a long document keeps complete pattern coverage and partial semantic coverage.
+
+The cap is stated in windows rather than milliseconds on purpose. A millisecond ceiling is machine-dependent, so a test asserting it would pass here and fail in CI, and this project has already paid for one flaky test.
+
+Scanning further would cost more than time. Every extra window is another chance to raise a false alarm on ordinary prose, so a twenty-window document would get twenty rolls of the dice and become *more* likely to be wrongly flagged than a short one. A bigger budget would have widened the window a little while making precision worse.
+
+What it will miss is an injection buried in the middle of a long document, which is the hardest case in this field and not one a 200ms budget would have solved either. So the gap is handled by admitting it rather than by pretending: buried-injection cases go in the eval so the report states a measured miss rate, the event records when the check stopped early so real traffic can be counted rather than guessed at, and the limit is written in `docs/what-it-protects.md` beside the others. The number lives in `rules.yaml`, so a deployment that would rather pay the latency can raise it without touching code.
+
 **A pipeline, not a single check.** Every check shares one shape, so adding check two or three doesn't force a redesign.
 
 **Four actions:** allow · log-but-allow · redact · block.
@@ -276,8 +292,16 @@ Two things left open by Phase 5, both deliberate:
 
 ### V2 — "it catches attacks and shows you"
 
-**7 — Injection detection, and the honest gate.** The semantic engine. Also where the real evaluation harness gets built — public jailbreak datasets, split into tune and holdout — because this is where a score can genuinely fool you in a way a regex can't. Thresholds picked from score distributions.
-*Exit: a written go or no-go, based on the holdout set. If it doesn't separate real attacks from innocent questions, stop and rethink — don't tune past it.*
+**7 — Injection detection, and the honest gate.** The semantic engine: patterns for the famous phrasings, embeddings for the paraphrases, capped at three windows. Also where the real evaluation harness gets built — hand-written attacks by family, public jailbreak datasets, and a separately written holdout — because this is where a score can genuinely fool you in a way a regex can't. Thresholds picked from score distributions.
+
+*Exit, every line of it:*
+
+- *a written go or no-go, based on the holdout set. If it doesn't separate real attacks from innocent questions, stop and rethink — don't tune past it.*
+- *the same holdout scored by an off-the-shelf classifier, and both numbers published side by side.*
+- *a false-alarm rate on the adversarial negative set, reported with the same weight as the catch rate.*
+- *buried-injection cases in the holdout, so the report states a measured miss rate for text past the window cap rather than assuming one.*
+- *the window cap recorded on the event when it is hit, visible in `gateway events`.*
+- *the cap, and what it misses, written in `docs/what-it-protects.md`.*
 
 **8 — Streaming.**
 *Exit: streaming works, and a block partway through cuts off cleanly.*
