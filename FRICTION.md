@@ -655,3 +655,81 @@ Worth noticing that the tests failed for the right reason here: they were
 guarding the data, and they broke because the plumbing under them moved, not
 because the data was wrong. The temptation was to edit the four unpackings
 and move on. That would have left the next field to break them again.
+
+**The error blamed the wrong dataset.** Five public datasets, fetched one
+after another, and the fifth failed:
+
+    in-the-wild-regular ... FAILED (HTTPStatusError)
+
+Nothing was wrong with the fifth dataset. The first four had made about
+thirty-four requests between them, which used up the anonymous rate limit,
+and the fifth got HTTP 429 on its very first page -- including at offset 0,
+which is what made it obvious once the status code was visible at all.
+
+Two faults, and the smaller one hid the bigger one. The smaller: my own error
+message printed `HTTPStatusError` and nothing else. A 429 means wait, a 404
+means the name is wrong, a 401 means it is gated -- three completely
+different responses from whoever is running the script, collapsed into one
+word that told them to do nothing in particular. The bigger: a script that
+asks a free public service for five datasets in a burst and treats being
+asked to slow down as an exceptional event.
+
+Fixed by printing the status code, retrying with backoff while honouring
+`Retry-After`, pausing half a second between pages, and skipping sources
+already on disk so a second run only fetches what is missing. The polite
+version finishes sooner than the greedy one, because the greedy one spends
+its time waiting.
+
+**A character nobody can see split a file in half.** The downloaded rows are
+written one JSON object per line. Reading them back crashed:
+
+    json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 10
+
+The file holds 1,032 records. Python counted 1,036 lines. The difference is
+five prompts containing **U+2028 LINE SEPARATOR**, a Unicode character that
+`json.dumps(ensure_ascii=False)` leaves exactly as it found it -- because
+JSON considers it an ordinary character -- and that `str.splitlines()` treats
+as a line break. Four records were therefore read as eight fragments, and the
+first fragment to be parsed failed.
+
+The characters came from real scraped jailbreak prompts, which is fitting:
+the data is adversarial, so of course it contains the awkward ones.
+
+Fixed on both sides. On write, U+2028 and U+2029 are escaped by hand, since
+`json.dumps` already handles the newline, the carriage return and the quote
+but not these two. On read, `split("\n")` instead of `splitlines()`, so the
+only thing treated as a line break is the character actually written as one.
+A test now round-trips a case containing U+2028 and asserts the written line
+survives `splitlines()`.
+
+Two days after writing a test that a zero-width space was still *present* in
+the attack set, an invisible character broke the loader. The same lesson from
+the other direction: with text data, the characters you cannot see are the
+ones that decide whether anything works.
+
+**A name reused inside one function.** `show_injection` held the list of
+attacks in `attacks`, and the public-dataset section later did
+`attacks = sum(...)`. The plain summary was fine. `--all` crashed with
+
+    TypeError: 'int' object is not iterable
+
+because only that path reaches the loop underneath. Caught by a test written
+for a completely different reason -- that `--all` must not print the PII set
+-- which is the argument for tests that run a command end to end rather than
+asserting one line of its output.
+
+**What the public data said about the window cap.** The point of downloading
+real attacks was to stop tuning against my own imagination, and the first
+measurement paid for the whole step:
+
+    hand-written attacks     41 cases   median    20 words   max     39
+    public attacks         2134 cases   median   236 words   max  8,445
+
+My attacks are one-liners. Real jailbreaks are essays -- the longest is
+8,445 words, and 17% of them run past the 600-word cap we had just agreed on.
+That does not mean 17% would be missed, because a DAN essay announces itself
+in its opening sentence, and the cap only loses an attack whose malicious
+part sits *after* it. But it does mean the number was chosen without knowing
+the distribution, which is exactly what this project keeps saying not to do.
+The cap is a parameter, and the gate will report the catch rate at one, three,
+five and ten windows rather than defending the first guess.

@@ -4,6 +4,7 @@ There is no detection code here. This module only knows what the right
 answer is, so Phase 2 has a target to hit.
 """
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
@@ -23,6 +24,12 @@ HOLDOUT_FILE = DATA_DIR / "holdout.yaml"
 #: because these are what the thresholds get tuned against and a reader has
 #: to be able to see them.
 INJECTION_POSITIVE_FILE = DATA_DIR / "injection_positive.yaml"
+
+#: Public datasets, fetched by `python -m eval --download` and gitignored:
+#: thousands of rows of other people's work under other people's licences.
+#: Absent on a fresh clone, which the loader below treats as normal rather
+#: than as an error -- the eval has to run without a network.
+DOWNLOADED_DIR = DATA_DIR / "downloaded"
 
 #: Legitimate requests that resemble attacks. The more important of the two
 #: files: a missed injection is bad, a blocked support agent uninstalls the
@@ -196,6 +203,60 @@ class FamilyCounts(NamedTuple):
     attacks: int
     tricky: int
     near_misses: int
+
+
+@dataclass(frozen=True)
+class PublicCase:
+    """One row from a public dataset.
+
+    No family, because these came with a yes-or-no label and nobody sorted
+    fifteen thousand prompts into six families. Carries the source it came
+    from, so a result can always be traced back to whose data produced it.
+    """
+
+    text: str
+    attack: bool
+    source: str
+
+    @property
+    def should_flag(self) -> bool:
+        return self.attack
+
+
+def load_public() -> list[PublicCase]:
+    """Public rows, or nothing at all if they were never downloaded.
+
+    An empty list rather than an error: a fresh clone has no network and
+    must still be able to run the tests and score the committed sets. The
+    report says plainly when it is working without them, because a score
+    over 90 hand-written cases and a score over 5,000 real ones are not the
+    same claim.
+    """
+    if not DOWNLOADED_DIR.is_dir():
+        return []
+
+    cases: list[PublicCase] = []
+    for path in sorted(DOWNLOADED_DIR.glob("*.jsonl")):
+        # split("\n") rather than splitlines(), because splitlines() also
+        # breaks on U+2028, which JSON treats as an ordinary character and
+        # real jailbreak prompts contain. See eval/public.py:as_line.
+        for line in path.read_text(encoding="utf-8").split("\n"):
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            cases.append(
+                PublicCase(text=raw["text"], attack=bool(raw["attack"]), source=raw["source"])
+            )
+    return cases
+
+
+def public_manifest() -> list[dict] | None:
+    """What was downloaded, from where, under which licence. None when
+    nothing has been."""
+    path = DOWNLOADED_DIR / "manifest.json"
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def attack_summary() -> list[FamilyCounts]:

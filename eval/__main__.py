@@ -8,6 +8,7 @@ python -m eval --holdout  score the independently written holdout cases instead
 
 python -m eval --injection          the prompt-injection attack set, by family
 python -m eval --injection --all    every attack, with the note on each one
+python -m eval --download           fetch the public datasets (needs a network)
 """
 
 import sys
@@ -20,6 +21,8 @@ from eval.dataset import (
     load_holdout,
     load_negative,
     load_positive,
+    load_public,
+    public_manifest,
     summary,
 )
 from gateway.console import use_utf8_output
@@ -70,6 +73,26 @@ def show_injection(*, every: bool) -> None:
     unattributed = sum(1 for b in benign if b.looks_like is None)
     print(f"  {'(ordinary traffic)':<22}{'':>8}{'':>8}{unattributed:>13}")
 
+    public = load_public()
+    manifest = public_manifest()
+    print()
+    if not public:
+        print("No public datasets downloaded. Run `python -m eval --download` to add")
+        print("thousands of real attacks -- a score over 90 hand-written cases and a")
+        print("score over 5,000 real ones are not the same claim.")
+    else:
+        # Not `attacks` -- that name already holds the hand-written list in
+        # this function, and rebinding it to a count made `--all` crash with
+        # "'int' object is not iterable" while the plain summary stayed fine,
+        # because the summary returns before it reaches the loop.
+        public_attacks = sum(1 for case in public if case.attack)
+        print(
+            f"Public datasets: {len(public)} rows ({public_attacks} attacks, "
+            f"{len(public) - public_attacks} benign)"
+        )
+        for entry in manifest or []:
+            print(f"  {entry['name']:<34}{entry['cases']:>6}   {entry['licence']}")
+
     if not every:
         print("\nRun with --all to read every case.")
         return
@@ -95,6 +118,14 @@ def main() -> None:
     # alongside --score: one flag says which set, the other says how much of
     # it to print. Checking --all first would print the PII set to someone
     # who asked for the attacks.
+    if "--download" in args:
+        # Imported here, not at the top, so that nothing which merely reads
+        # the evaluation set depends on a network client being importable.
+        from eval.public import download
+
+        download(refresh="--refresh" in args)
+        return
+
     if "--injection" in args:
         show_injection(every="--all" in args)
         return
