@@ -6,7 +6,16 @@ name or a duplicated case would quietly weaken every score Phase 2 produces.
 
 import pytest
 
-from eval.dataset import KNOWN_TYPES, load_all, load_holdout, load_negative, load_positive
+from eval.dataset import (
+    KNOWN_FAMILIES,
+    KNOWN_TYPES,
+    attack_summary,
+    load_all,
+    load_attacks,
+    load_holdout,
+    load_negative,
+    load_positive,
+)
 
 
 def test_both_files_load():
@@ -99,3 +108,73 @@ def test_holdout_does_not_repeat_the_tuned_set():
     for case in load_holdout():
         text = " ".join(case.text.split())
         assert text not in tuned, f"holdout repeats a tuned case: {case.text!r}"
+
+
+# --- Phase 7: the prompt-injection attack set ----------------------------
+# Same job as the tests above, for a file where the stakes are higher: these
+# cases are what the thresholds get tuned against, so a typo here does not
+# fail loudly, it just quietly removes a family from the tuning.
+
+
+def test_attack_set_loads():
+    assert load_attacks()
+
+
+def test_every_attack_declares_a_family():
+    for attack in load_attacks():
+        assert attack.should_flag, f"attack with no family: {attack.text!r}"
+
+
+def test_families_are_spelled_correctly():
+    for attack in load_attacks():
+        assert attack.family in KNOWN_FAMILIES, f"unknown family {attack.family!r}"
+
+
+def test_every_known_family_has_cases():
+    """A family worth naming is a family worth testing. Four cases is the
+    floor at which a per-family score means anything at all."""
+    for family, total, _ in attack_summary():
+        assert total >= 4, f"{family} has only {total} cases"
+
+
+def test_every_family_has_a_tricky_case():
+    """The point of the embedding model is the attacks a keyword list misses.
+    A family made only of famous phrasings would be a family where patterns
+    score 100% and nothing has been learned."""
+    for family, _, hard in attack_summary():
+        assert hard >= 1, f"{family} has no case a keyword list would miss"
+
+
+def test_most_attacks_are_tricky():
+    """If the easy cases are the majority, a good overall score proves only
+    that we can match the strings we wrote down ourselves."""
+    attacks = load_attacks()
+    tricky = sum(1 for a in attacks if a.tricky)
+    assert tricky >= len(attacks) * 0.5, f"only {tricky} of {len(attacks)} are tricky"
+
+
+def test_no_duplicate_attacks():
+    seen: dict[str, int] = {}
+    for attack in load_attacks():
+        key = " ".join(attack.text.split())
+        seen[key] = seen.get(key, 0) + 1
+
+    duplicates = {text: n for text, n in seen.items() if n > 1}
+    assert not duplicates, f"duplicated attacks: {list(duplicates)[:3]}"
+
+
+def test_no_attack_is_empty():
+    for attack in load_attacks():
+        assert attack.text.strip(), "an attack has no text"
+
+
+def test_the_obfuscated_cases_survived_being_written_down():
+    """The encoding family only tests anything if the invisible characters
+    are really in the file. A zero-width space eaten by an editor, or a
+    \\u200b left as six literal characters, would turn the hardest case in
+    the set into an easy one without changing how it looks on screen."""
+    encoded = [a.text for a in load_attacks() if a.family == "encoding"]
+
+    hidden = [t for t in encoded if "​" in t]
+    assert hidden, "no case contains a real zero-width space"
+    assert "\\u200b" not in "".join(encoded), "an escape was stored literally"

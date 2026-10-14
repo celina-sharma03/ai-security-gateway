@@ -18,6 +18,25 @@ NEGATIVE_FILE = DATA_DIR / "pii_negative.yaml"
 #: against -- that is what makes the score they produce believable.
 HOLDOUT_FILE = DATA_DIR / "holdout.yaml"
 
+#: Phase 7. Attacks the gateway must catch, grouped by family. Committed,
+#: because these are what the thresholds get tuned against and a reader has
+#: to be able to see them.
+INJECTION_POSITIVE_FILE = DATA_DIR / "injection_positive.yaml"
+
+#: Every family an attack is allowed to declare. A misspelled family would
+#: silently create a seventh family of one case and leave a real one
+#: untested, so the tests check this the same way they check KNOWN_TYPES.
+KNOWN_FAMILIES = frozenset(
+    {
+        "instruction_override",
+        "role_play",
+        "prompt_extraction",
+        "encoding",
+        "context_stuffing",
+        "indirect_injection",
+    }
+)
+
 #: Every category a positive case is allowed to declare. Anything outside
 #: this set is a typo in the data file, and the tests will say so.
 KNOWN_TYPES = frozenset(
@@ -101,6 +120,64 @@ def load_holdout() -> list[Case]:
     return [
         _parse(case, positive="expect" in case or "expect_any_of" in case) for case in raw["cases"]
     ]
+
+
+@dataclass(frozen=True)
+class Attack:
+    """One prompt-injection case: the text, and which family it belongs to.
+
+    A case with a family must be caught. A case without one is benign and
+    must pass through -- the same convention the holdout file already uses,
+    where declaring `expect` is what makes a case a positive.
+    """
+
+    text: str
+    family: str | None = None
+    note: str | None = None
+    tricky: bool = False
+
+    @property
+    def should_flag(self) -> bool:
+        return self.family is not None
+
+    def __str__(self) -> str:
+        collapsed = " ".join(self.text.split())
+        shown = collapsed if len(collapsed) <= 64 else collapsed[:61] + "..."
+        return f"{'FLAG' if self.should_flag else 'PASS'}  {shown!r}"
+
+
+def _load_attacks(path: Path) -> list[Attack]:
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return [
+        Attack(
+            text=case["text"],
+            family=case.get("family"),
+            note=case.get("note"),
+            tricky=bool(case.get("tricky", False)),
+        )
+        for case in raw["cases"]
+    ]
+
+
+def load_attacks() -> list[Attack]:
+    """Hand-written attacks, every one of which must be caught."""
+    return _load_attacks(INJECTION_POSITIVE_FILE)
+
+
+def attack_summary() -> list[tuple[str, int, int]]:
+    """Per family: how many cases, and how many of those a keyword list
+    cannot catch. Reported separately because an overall score on this set
+    could be carried entirely by the famous phrasings."""
+    attacks = load_attacks()
+    rows = [
+        (
+            family,
+            sum(1 for a in attacks if a.family == family),
+            sum(1 for a in attacks if a.family == family and a.tricky),
+        )
+        for family in sorted(KNOWN_FAMILIES)
+    ]
+    return sorted(rows, key=lambda row: -row[1])
 
 
 def summary() -> dict[str, int]:
