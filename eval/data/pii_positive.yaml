@@ -51,6 +51,28 @@ cases:
     expect: credit_card
     note: "buried in a config-looking string alongside other fields"
 
+  - text: "my card is 4111.1111.1111.1111"
+    expect: credit_card
+    tricky: true
+    note: "dots instead of spaces, which is how a card arrives when it is copied
+           out of a PDF. A perfectly valid number that the first version of the
+           pattern never handed to the checksum at all."
+
+# The line-wrapped card is not here, deliberately. Collapsed of its
+  # whitespace it is the same string as the plain case above, so the
+  # duplicate check rejects it -- correctly, since it would add a point to
+  # the score without adding coverage. The character it turns on is the one
+  # that gets collapsed, which makes it a unit test rather than a scoring
+  # case. See test_card_wrapped_onto_a_second_line in tests/test_redaction.py.
+
+  - text: "my card with 4231 1122 2222 2211"
+    expect: credit_card
+    tricky: true
+    note: "one digit mistyped, so it fails Luhn -- and the word card is sitting
+           right beside it. Found by testing the live /check endpoint by hand.
+           A typo still leaks fifteen correct digits, and the checksum used to
+           be the only rule, so the surrounding words were thrown away."
+
   # ─── API keys and secrets ────────────────────────────────────────────
   # Documentation examples and clearly-fake values.
 

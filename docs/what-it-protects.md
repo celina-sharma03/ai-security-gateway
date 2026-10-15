@@ -60,6 +60,21 @@ nearby word like "phone", "aadhaar" or "pan".
 missing one is better than redacting every invoice number in the company, which
 is what the alternative does, and that gateway gets switched off within a week.
 
+### A card number with a digit wrong, and no word beside it
+
+Card numbers carry the Luhn checksum, which is what stops every sixteen-digit
+order number being redacted. A card with a typo in it fails that checksum —
+and a typo still leaks fifteen correct digits.
+
+So a mistyped card is redacted **only when a word like "card", "visa" or
+"debit" is within about twenty-five characters of it**. `my card with 4231
+1122 2222 2211` is caught. The same digits pasted alone are not.
+
+The window is short on purpose: at the usual forty characters, `my card was
+charged for invoice 1234567890123456` would redact the invoice number, which
+is the exact failure the checksum exists to prevent. Words like "invoice",
+"order" and "reference" nearby rule the match out entirely.
+
 ### A typo
 
 Detection leans on the words around a value, so `adhar` is handled but

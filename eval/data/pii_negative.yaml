@@ -23,6 +23,23 @@ cases:
     tricky: true
     note: "16 digits in groups of four — visually identical to a card, fails Luhn"
 
+  - text: "my card was charged for invoice 1234567890123456"
+    tricky: true
+    note: "the word card and a 16-digit number in one sentence, and the number is
+           the invoice. This is how the context fallback goes wrong, which is why
+           its window is 25 characters and why 'invoice' blocks it outright."
+
+  - text: "the reference is 9988776655443322 on the card statement"
+    tricky: true
+    note: "same trap from the other direction — the card word comes after the
+           number, and the number is still a reference"
+
+  - text: "pi is 3.14159265358979 to fourteen places"
+    tricky: true
+    note: "fourteen digits with dots in them. Allowing dots as a card separator
+           has to not catch this, which is why the dotted pattern requires
+           groups of four and a real card always has them."
+
   - text: "tracking number 8123 4567 8901 2345"
     tricky: true
     note: "starts with 81, a real RuPay range, but fails Luhn"

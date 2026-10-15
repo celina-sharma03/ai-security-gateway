@@ -264,3 +264,41 @@ def test_upi_id_named_by_a_mobile_number_needs_no_context():
 
 def test_upi_handle_that_names_a_bank_needs_no_context():
     assert redaction.check("Celina@AXIS?").categories == {"upi_id"}
+
+
+# --- Cards the checksum never got to judge ------------------------------
+# Found by hand, on the live /check endpoint, after a made-up card number was
+# sent onward untouched. The checksum was right to reject it; the mistake was
+# that the checksum was the only rule.
+
+
+def test_card_wrapped_onto_a_second_line():
+    """An email client breaking a long number across two lines produces a
+    perfectly valid card that the original pattern never handed to Luhn,
+    because it accepted only a space or a dash between digits.
+
+    This is a unit test rather than an evaluation case because, collapsed of
+    its whitespace, it is the same string as the plain case -- and the
+    whitespace is the entire point.
+    """
+    result = redaction.check("my card is 4111 1111\n1111 1111")
+    assert result.categories == {"credit_card"}
+
+
+def test_card_separated_by_dots():
+    assert redaction.check("my card is 4111.1111.1111.1111").categories == {"credit_card"}
+
+
+def test_mistyped_card_beside_the_word_card():
+    """Fails Luhn by one digit, and still leaks fifteen correct ones."""
+    assert redaction.check("my card with 4231 1122 2222 2211").categories == {"credit_card"}
+
+
+def test_an_invoice_number_is_not_a_card_just_because_card_is_nearby():
+    """The failure the checksum was protecting against. The fallback above
+    must not reintroduce it."""
+    assert redaction.check("my card was charged for invoice 1234567890123456").categories == set()
+
+
+def test_dots_do_not_make_pi_a_card():
+    assert redaction.check("pi is 3.14159265358979 to fourteen places").categories == set()

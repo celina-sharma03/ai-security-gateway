@@ -802,3 +802,63 @@ be a detection problem at all: quoting and asking are not instructing, and
 the eventual fix may be a per-key exemption for a security team rather than
 a cleverer model. Written down now, before the model arrives and gets blamed
 for not solving it.
+
+**A card number went through because the checksum was the only rule.** Found
+by hand, in the browser, on the live `/check` endpoint -- not by any test.
+A made-up card typed into Swagger came back like this:
+
+    "categories": ["phone"],
+    "redacted": "my card with 4231 1122 2222 2211 and phone no [PHONE_1]"
+
+The phone number was hidden. The card was not. The reason is correct and the
+behaviour was still wrong: the Luhn total for those digits is 47, which is
+not divisible by ten, so the validator refused it. One digit had been
+mistyped.
+
+The checksum was right. The mistake was that it was the **only** rule. The
+words "my card with" were sitting directly in front of the number and the
+pattern threw them away -- while phone, Aadhaar and PAN all use exactly that
+kind of context to decide. Credit card was the one category that ignored its
+surroundings completely. And a card with one digit wrong still leaks fifteen
+correct ones.
+
+The better question came next: are there real cards that fail Luhn? No --
+ISO/IEC 7812 makes the check digit mandatory, so every issued Visa,
+Mastercard, Amex, RuPay and Maestro number passes it. But asking it led
+somewhere worse, which is the part worth remembering:
+
+    NUMBER                  REGEX SEES IT   LUHN OK   REDACTED
+    4111.1111.1111.1111     False           True      False
+    4111 1111<newline>1111  False           True      False
+    4111111111111111110     True            True      True
+
+Two **perfectly valid** card numbers, correct checksums, not redacted --
+because the pattern accepted only a space or a dash between digits, so the
+validator was never shown them at all. A card copied out of a PDF arrives
+with dots. A card in an email arrives wrapped onto a second line. Neither is
+unusual, and both were worse misses than the one that started this, since
+nothing was wrong with those numbers.
+
+The lesson is about where to look. The checksum was the interesting part, so
+the checksum is where attention went -- but it only runs **after** the regex
+has decided what to show it, and the regex is where the cards were being
+lost. A validator can only reject; it can never rescue something the matcher
+never found.
+
+One idea was dropped along the way: hunting card-length runs inside longer
+digit strings, for cases like `txn12344111111111111111`. Testing seven
+realistic layouts -- CSV, JSON, pipes, card-plus-expiry-plus-CVV -- showed
+six already worked, and the only failure was digits glued directly onto a
+card with no separator, which no person types. Chasing it would have meant
+searching every long ID for a card hiding inside, which is how order numbers
+start getting redacted. Measured, then dropped, rather than built because it
+sounded thorough.
+
+Three patterns now, not one: the original checksum pattern, a grouped one
+that also allows dots and line breaks, and a context fallback for a failed
+checksum with a card word within twenty-five characters. Twenty-five rather
+than the usual forty because `my card was charged for invoice
+1234567890123456` reaches forty and would redact the invoice -- the exact
+failure the checksum exists to prevent. That sentence is now a permanent
+negative case, along with pi to fourteen places, which is fourteen digits
+with dots in it.

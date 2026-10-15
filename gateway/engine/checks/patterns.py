@@ -66,6 +66,17 @@ def _c(*words: str) -> re.Pattern[str]:
 _UPI_ID = re.compile(r"\b([A-Za-z0-9][A-Za-z0-9._-]*)@[A-Za-z][A-Za-z0-9]*\b(?!\.[A-Za-z])")
 
 
+#: Words that mean the number next to them is meant to be a card. Used by the
+#: fallback pattern below, which runs without a checksum and therefore needs
+#: something else to be sure.
+_CARD_WORDS = _c("card", "cards", "visa", "mastercard", "amex", "rupay", "maestro", "debit")
+
+#: Words that mean it is not. An invoice number sitting in the same sentence
+#: as the word "card" is the way the fallback pattern goes wrong, so it is
+#: ruled out explicitly rather than hoped about.
+_NOT_A_CARD = _c("invoice", "order", "reference", "ref", "isbn", "tracking", "account", "imei")
+
+
 PATTERNS: tuple[Pattern, ...] = (
     # --- Credit cards ----------------------------------------------------
     # 13 to 19 digits, optionally spaced or dashed. The validator does the
@@ -76,6 +87,43 @@ PATTERNS: tuple[Pattern, ...] = (
         regex=re.compile(r"\b\d(?:[ -]?\d){12,18}\b"),
         validator=looks_like_card,
         label="luhn",
+    ),
+    # The same checksum, for cards the pattern above never gets to judge.
+    # It accepts only a space or a dash between digits, so a card copied out
+    # of a PDF as 4111.1111.1111.1111, or wrapped onto a second line by an
+    # email client, is never handed to the validator at all -- a perfectly
+    # valid card number, missed on punctuation.
+    #
+    # Groups of four are required here, which is what makes it safe to allow
+    # a dot. "3.14159265358979" is fourteen digits with dots in it and is not
+    # grouped, so it cannot match; a real card always is.
+    Pattern(
+        category="credit_card",
+        regex=re.compile(r"\b\d{4}[ .\-\n]\d{4}[ .\-\n]\d{4}[ .\-\n]\d{4}(?:[ .\-\n]\d{3})?\b"),
+        validator=looks_like_card,
+        label="luhn/grouped",
+    ),
+    # A card-shaped number that fails the checksum, with the word "card"
+    # right beside it.
+    #
+    # Found by testing the live endpoint with a made-up number: "my card with
+    # 4231 1122 2222 2211" was sent onward untouched, because one digit was
+    # wrong. The checksum was doing its job -- but it was the *only* rule, so
+    # the words sitting next to the number were thrown away, and a mistyped
+    # card still leaks fifteen correct digits.
+    #
+    # The context window is deliberately short. At the usual 40 characters,
+    # "my card was charged for invoice 1234567890123456" would redact the
+    # invoice number, which is the exact failure the checksum was protecting
+    # against. Twenty-five characters reaches "my card with" and not much
+    # else, and the blocked words rule out the rest.
+    Pattern(
+        category="credit_card",
+        regex=re.compile(r"\b\d(?:[ .\-]?\d){12,18}\b"),
+        needs_context=_CARD_WORDS,
+        blocked_by_context=_NOT_A_CARD,
+        window=25,
+        label="context",
     ),
     # --- API keys and secrets --------------------------------------------
     # Each provider stamps its keys with a prefix. That prefix plus a minimum
