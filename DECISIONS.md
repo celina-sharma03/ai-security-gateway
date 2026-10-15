@@ -102,7 +102,18 @@ A purpose-built classifier is the measuring stick, not the plan. Those models ar
 
 The negative set matters more here than it did for PII. *"How do I stop prompt injection in my own app?"* is a security question, not an attack; so is a novelist asking for a villain's dialogue. A detector that blocks those is worse than no detector, because the people it annoys are the people who chose to install it.
 
-**The semantic check reads the first three windows and no further.** MiniLM reads about 256 word-pieces at a time, so a long prompt has to be cut into windows and scored one at a time. The cap is three — roughly the first 600 words, embedded as one batch for about 25-30ms — and patterns still run over the whole text, so a long document keeps complete pattern coverage and partial semantic coverage.
+**The semantic check reads the first three windows and no further.** MiniLM reads about 256 word-pieces at a time, so a long prompt has to be cut into windows and scored one at a time. The cap is three — roughly the first 600 words — and patterns still run over the whole text, so a long document keeps complete pattern coverage and partial semantic coverage.
+
+**Measured, after this was first written with a guess in it.** The guess said three windows would cost 25-30ms. It costs about 265ms, which is ten times out, because a window is not a short prompt: a one-line prompt is around twelve tokens and a full window is around 260, and the work scales with the tokens.
+
+    short prompt           16ms      one window      103ms
+    three windows         265ms      model load      7.3s, once at startup
+
+The cap survives the correction, because the cost is already proportional to the input. Short prompts fill one window and pay 16ms, which is the 3% of a 500ms model call that the original budget asked for. Only text long enough to fill three windows pays 265ms — and that same text makes the provider slower too, since prefill scales with input, so the share stays near 15% rather than landing on top of a fixed cost.
+
+Dropping to one window would save that quarter-second in exactly the place the risk is: real jailbreaks have a median length of 236 words, so more than half of them would be read only in part. That is the wrong way round.
+
+ONNX with int8 quantisation was measured as a way to buy the tail back and was **rejected: it is slower**, 0.6-0.8x on windows, presumably because torch uses Intel's MKL on this hardware and the ONNX session does not thread as well. Written down so nobody tries it twice.
 
 The cap is stated in windows rather than milliseconds on purpose. A millisecond ceiling is machine-dependent, so a test asserting it would pass here and fail in CI, and this project has already paid for one flaky test.
 
