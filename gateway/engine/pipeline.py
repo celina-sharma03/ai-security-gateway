@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 
-from gateway.engine.checks import redaction
+from gateway.engine.checks import injection, redaction
 from gateway.engine.result import Action, CheckResult
 from gateway.engine.rules import Rules
 from gateway.settings import Mode
@@ -121,6 +121,14 @@ class Pipeline:
 def build_pipeline(mode: Mode, rules: Rules) -> Pipeline:
     """The checks the gateway runs, in the order it runs them."""
     return Pipeline(
-        checks=[("redaction", partial(redaction.check, rules=rules))],
+        checks=[
+            # Redaction first. It is the cheap one, it never blocks on its
+            # own, and running it first means that if injection blocks the
+            # request, the values in the prompt have already been accounted
+            # for in the event -- so the log says "this was blocked and it
+            # also contained a card number", which is the more useful record.
+            ("redaction", partial(redaction.check, rules=rules)),
+            ("injection", partial(injection.check, rules=rules)),
+        ],
         mode=mode,
     )

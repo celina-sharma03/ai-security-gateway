@@ -127,6 +127,15 @@ def main() -> None:
         return
 
     if "--injection" in args:
+        # --injection says which set; --score and --all say what to do with
+        # it. Read together, for the third time now, because the first time
+        # cost a holdout score that silently graded the tuned set.
+        if "--score" in args:
+            from eval.score_injection import report as injection_report
+
+            injection_report()
+            return
+
         show_injection(every="--all" in args)
         return
 

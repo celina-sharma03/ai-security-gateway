@@ -30,6 +30,27 @@ categories:
   upi_id: redact
 
 
+# ─── Prompt injection ──────────────────────────────────────────────────
+#
+# Attempts to override the instructions you set -- "ignore all previous
+# instructions", the DAN personas, forged system messages.
+#
+#   block    stop the request; the caller gets a readable explanation   (default)
+#   log      send it on, but record that it happened
+#   off      don't look for this at all
+#
+# There is no `redact` here on purpose. An injection is not a value sitting
+# inside an ordinary message, it is usually the whole point of the message,
+# and cutting it out leaves a mangled prompt and a person who cannot tell
+# what happened.
+#
+# In shadow mode this becomes a log like everything else, so a new install
+# records what it would have blocked without blocking anything.
+
+injection:
+  action: block
+
+
 # ─── Your own patterns ─────────────────────────────────────────────────
 #
 # For values only your organisation has, like employee IDs or project

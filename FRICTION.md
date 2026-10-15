@@ -733,3 +733,72 @@ part sits *after* it. But it does mean the number was chosen without knowing
 the distribution, which is exactly what this project keeps saying not to do.
 The cap is a parameter, and the gate will report the catch rate at one, three,
 five and ten windows rather than defending the first guess.
+
+**Nearly demonstrated the new detection against a four-phase-old server.**
+Starting the gateway failed:
+
+    [Errno 10048] only one usage of each socket address is normally permitted
+
+Port 8080 was already held by a `gateway serve` left running days earlier.
+The tempting read of that error is "something is in the way, use another
+port" -- and the dangerous one is not noticing at all, because a curl to
+8080 answers perfectly happily. So before anything else, the thing on the
+port was asked who it was:
+
+    {"name":"AI Security Gateway","version":"0.4.0", ...}
+
+A Phase 4 build. It answered `POST /check` on the canonical injection with
+
+    {"action":"allow","categories":[],"findings":[]}
+
+Had that been the demonstration, the conclusion would have been that the new
+detection does not work, and the next hour would have been spent debugging
+code that was already correct. This is the second time in this project that
+a stale listener nearly produced a wrong conclusion -- the first was in
+Phase 6, where a curl meant for a container was answered by a local server.
+
+The habit that comes out of it: **ask what is answering before believing
+what it says.** Every service in this project reports its version at `/`
+precisely so that question has a cheap answer, and the version is now the
+first thing checked rather than the last thing suspected.
+
+**The attack set had a wrong label, and the measurement found it.** The
+patterns were written from public jailbreak collections, on purpose, without
+reading our own tricky cases -- so that the gap between patterns and the
+embedding model would be a real gap rather than one engineered by aiming at
+our own test set. The prediction was that patterns would do well on the
+thirteen ordinary cases and badly on the twenty-eight tricky ones. They did:
+85% and 25%.
+
+Except in one family. `context_stuffing` scored **3 out of 3 on its tricky
+cases**, and the reason is not that the patterns are clever. Forged
+delimiters are literal strings -- `<|im_start|>`, `"role": "system"`,
+`---BEGIN SYSTEM MESSAGE---` -- and a literal string is precisely what a
+regex is good at. Calling those cases tricky was my mistake when writing the
+file, not a surprise about the detector.
+
+Worth keeping because of the direction it runs in: the honest measurement
+corrected the test data rather than the code. The labels will be fixed, and
+the 25% recalculated, before the embedding model is measured against it.
+
+**The false alarms were all security people.** Five of the forty-nine
+legitimate requests were flagged, and every single one is somebody doing
+security work:
+
+    'Is "ignore all previous instructions" still an effective attack ag...'
+    'Review this detection rule for false positives: pattern = "ignore ...'
+    'I found this in our support inbox and I think it is an attack. Can...'
+    'Debug this API request, it returns a 400: {"role": "system", "cont...'
+    'Why does my chat template render wrong? I am sending: <|im_start|>...'
+
+Three of them contain the attack text verbatim, inside a question *about*
+the attack. Two are developers pasting the real thing to debug it. These are
+the people most likely to install this gateway, and the gateway blocks them.
+
+No pattern can separate these, because the words are identical. It is not
+obvious that an embedding model can either, since the subject matter is
+genuinely injection in all five. The honest conclusion is that this may not
+be a detection problem at all: quoting and asking are not instructing, and
+the eventual fix may be a per-key exemption for a security team rather than
+a cleverer model. Written down now, before the model arrives and gets blamed
+for not solving it.

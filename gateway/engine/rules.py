@@ -106,6 +106,40 @@ class CustomPattern(BaseModel):
         )
 
 
+class InjectionRules(BaseModel):
+    """What to do about a prompt-injection attempt.
+
+    Its own section rather than another line under `categories`, because the
+    categories there are all kinds of *value* that can be redacted out of a
+    message, and an injection is not a value. There is nothing to replace: the
+    attack is usually the whole point of the prompt.
+
+    So `redact` is not offered. The default is `block`, which shadow mode
+    turns into a log until an operator has read a week of events and decided
+    to switch over.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    action: Choice = Choice.BLOCK
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def _read_off(cls, value: object) -> object:
+        return _yaml_off(value)
+
+    @field_validator("action")
+    @classmethod
+    def _redaction_makes_no_sense(cls, action: Choice) -> Choice:
+        if action is Choice.REDACT:
+            raise ValueError(
+                "injection can be block, log or off, but not redact -- "
+                "cutting the attack out of a prompt leaves a mangled message "
+                "and a person who cannot tell what happened"
+            )
+        return action
+
+
 class Rules(BaseModel):
     """What to do about each category, plus the operator's own patterns."""
 
@@ -113,6 +147,16 @@ class Rules(BaseModel):
 
     categories: dict[str, Choice] = {}
     custom: tuple[CustomPattern, ...] = ()
+    injection: InjectionRules = InjectionRules()
+
+    @field_validator("injection", mode="before")
+    @classmethod
+    def _read_injection(cls, value: object) -> object:
+        # `injection: block` is the shorthand an operator will reach for
+        # first, and refusing it over a missing `action:` would be pedantry.
+        if isinstance(value, str) or value is False:
+            return {"action": value}
+        return InjectionRules() if value is None else value
 
     @field_validator("categories", mode="before")
     @classmethod
