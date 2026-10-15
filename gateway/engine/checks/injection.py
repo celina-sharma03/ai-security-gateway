@@ -105,9 +105,12 @@ SIGNATURES: tuple[Signature, ...] = (
         name="unrestricted_mode",
         regex=_p(
             r"\b(?:developer|dev|jailbreak|jailbroken|unrestricted|unfiltered|unlocked|god|"
-            r"sudo|root|admin|debug|audit)\W+mode\b"
+            r"sudo|root|admin)\W+mode\b"
         ),
-        note="an invented mode with no restrictions, named after the ones that circulate",
+        note="an invented mode with no restrictions, named after the ones that circulate. "
+        "'audit' and 'debug' were in this list and have been taken out: neither is in the "
+        "public lineage, 'audit mode' was here only because our own test set invented it, "
+        "and 'enable debug mode' is something people say about software",
     ),
     Signature(
         name="no_restrictions",
