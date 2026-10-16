@@ -158,3 +158,30 @@ def test_one_signature_crashing_does_not_take_the_request_down():
 
     assert result.action is Action.ALLOW
     assert result.errors == ("injection: RuntimeError",)
+
+
+# --- Wiring: the semantic check is opt-in -------------------------------
+
+
+def test_the_semantic_check_is_off_by_default():
+    """2GB of install and 400MB of memory, to produce a log entry. A gateway
+    that only wants redaction must not pay for it."""
+    names = [name for name, _ in build_pipeline(Mode.ENFORCE, Rules()).checks]
+    assert names == ["redaction", "injection"]
+
+
+def test_the_semantic_check_can_be_switched_on():
+    names = [name for name, _ in build_pipeline(Mode.ENFORCE, Rules(), semantic_check=True).checks]
+    assert names == ["redaction", "injection", "semantic"]
+
+
+def test_switching_it_on_does_not_load_the_model():
+    """Building the pipeline must stay instant. The model loads at startup,
+    in the lifespan, where seven seconds is a slow boot rather than a
+    request that appears to hang."""
+    from gateway.engine.checks import semantic
+
+    semantic.set_model(None)
+    build_pipeline(Mode.ENFORCE, Rules(), semantic_check=True)
+
+    assert semantic._model is None

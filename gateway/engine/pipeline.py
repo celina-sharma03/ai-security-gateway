@@ -118,8 +118,23 @@ class Pipeline:
         )
 
 
-def build_pipeline(mode: Mode, rules: Rules) -> Pipeline:
-    """The checks the gateway runs, in the order it runs them."""
+def build_pipeline(mode: Mode, rules: Rules, *, semantic_check: bool = False) -> Pipeline:
+    """The checks the gateway runs, in the order it runs them.
+
+    The semantic check is off unless asked for. It needs a 2GB install and
+    holds 400MB of memory to produce a log entry, so a gateway that only
+    wants redaction should not pay for it -- and `gateway check` on an email
+    address certainly should not.
+    """
+    extra: list[tuple[str, Check]] = []
+    if semantic_check:
+        # Imported here so that torch is loaded only by a gateway that asked
+        # for it. At the top of the file it would cost every CLI command
+        # seven seconds.
+        from gateway.engine.checks import semantic
+
+        extra.append(("semantic", partial(semantic.check, rules=rules)))
+
     return Pipeline(
         checks=[
             # Redaction first. It is the cheap one, it never blocks on its
@@ -129,6 +144,7 @@ def build_pipeline(mode: Mode, rules: Rules) -> Pipeline:
             # also contained a card number", which is the more useful record.
             ("redaction", partial(redaction.check, rules=rules)),
             ("injection", partial(injection.check, rules=rules)),
+            *extra,
         ],
         mode=mode,
     )

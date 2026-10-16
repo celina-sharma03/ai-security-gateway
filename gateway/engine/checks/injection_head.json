@@ -1,0 +1,26 @@
+{
+  "what": "Logistic-regression head over all-MiniLM-L6-v2 vectors, 384 weights and a bias.",
+  "why_this_file_exists": "A number is only worth reporting if the thing producing it never saw the cases it is graded on. This records what the head was trained on, so that claim can be checked rather than believed.",
+  "trained_on": [
+    "deepset/prompt-injections (apache-2.0)",
+    "jackhhao/jailbreak-classification (apache-2.0)",
+    "TrustAIRLab/in-the-wild-jailbreak-prompts (mit)"
+  ],
+  "excluded_from_training": [
+    "eval/data/injection_positive.yaml",
+    "eval/data/injection_negative.yaml",
+    "eval/data/holdout.yaml",
+    "the 30% test split of the public rows"
+  ],
+  "rows_trained_on": 3492,
+  "rows_held_out": 1497,
+  "split": "70/30 stratified, random_state=7",
+  "sample_per_row": "the first window only, so three windows of filler are never labelled as an attack",
+  "inference": "every window scored, the highest wins",
+  "measured": {
+    "held_out_public_rows": "66% caught, 4.6% flagged, at 0.70",
+    "hand_written_cases": "67% caught with patterns, 10% flagged",
+    "note": "The gap between those two is the finding. See docs/injection-detection.md."
+  },
+  "trained_on_date": "2026-10-16"
+}

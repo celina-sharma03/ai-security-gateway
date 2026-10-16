@@ -56,7 +56,11 @@ use_utf8_output()
 # mistake in it should stop the gateway starting -- not fail on the thousandth
 # request, at night. The cost is that editing rules.yaml needs a restart, which
 # is the honest trade for being predictable.
-pipeline = build_pipeline(settings.mode, load_rules(settings.rules_file))
+pipeline = build_pipeline(
+    settings.mode,
+    load_rules(settings.rules_file),
+    semantic_check=settings.semantic_check,
+)
 
 provider = OpenAIProvider()
 
@@ -69,6 +73,16 @@ async def lifespan(app: FastAPI):
     handshake every time -- slower than the checks it is waiting behind.
     """
     app.state.upstream = Upstream()
+
+    if settings.semantic_check:
+        # Loading the model takes about seven seconds. Doing it here means
+        # the gateway is slow to start; doing it lazily means the first
+        # request of the day hangs for seven seconds, which looks exactly
+        # like a broken gateway and gets reported as one.
+        from gateway.engine.checks import semantic
+
+        semantic.warm_up()
+
     yield
     await app.state.upstream.close()
 

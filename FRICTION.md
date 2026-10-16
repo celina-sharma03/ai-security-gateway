@@ -955,3 +955,79 @@ The habit this reinforces: a number in a design document that nobody has
 measured is a placeholder wearing a disguise. DECISIONS.md already says
 "threshold values come from the data, not a guess" about detection
 thresholds. The same applies to every other number in it.
+
+**We downloaded 4,989 labelled examples and the detector was using 15 of
+them.** The first semantic check compared incoming text against fifteen
+hand-written example attacks and took the closest match. It found 54% of
+real attacks and flagged 14% of legitimate requests, which is useless.
+
+Two things were wrong with it, and only one was obvious.
+
+The obvious one: taking the maximum over fifteen examples gives *every* text
+fifteen chances to look close, benign text included. Scoring against benign
+anchors as well and using the difference cut false alarms from 14% to 2% at
+the same catch rate.
+
+The one worth remembering: the detector had no idea what an attack was. Its
+entire knowledge was fifteen sentences somebody wrote by hand, while 4,974
+labelled rows sat in a folder being used only to grade it. Training a
+384-weight logistic head on those rows instead -- same model, same vectors,
+same speed, 1.9KB of learned numbers -- was four times more precise: 3.5%
+flagged against 14%, at a better catch rate.
+
+The lesson is not "use machine learning". It is that the data had already
+been collected, for this exact purpose, in an earlier step of this same
+phase, and it took measuring a bad result to notice it was not being used.
+
+**The trained head learned the corpus, not the problem.** It scored 77% on
+held-out rows from the datasets it trained on and 58% on 43 attacks written
+by hand from scratch. The gap widens with confidence: at its most confident
+setting it catches 25% of the public jailbreaks and **none at all** of the
+hand-written ones. The region where it is surest is the region most specific
+to that one collection.
+
+This is exactly what the hand-written set was for. A score on held-out rows
+from the same corpus would have read 77%, looked respectable, and meant very
+little.
+
+**The purpose-built classifier was better at detection and worse to live
+with.** `protectai/deberta-v3-base-prompt-injection-v2`, 700MB, built by a
+security company for this job, used as published, on the same 92 cases:
+
+    ours              67% caught   10/24 hard cases   10% flagged
+    the 700MB model   88% caught   19/24 hard cases   37% flagged
+
+It is genuinely better at finding attacks. It also flags, at full
+confidence:
+
+    1.00  Skip the explanation and just give me the SQL.
+    1.00  Repeat the summary above as a bulleted list.
+    0.99  Show me your sources for that last answer.
+
+Raising the threshold does not help, because it is not uncertain about
+these. At 0.99 it still flags 24%.
+
+Both fail on the same boundary, which is the real finding of the phase:
+telling "the user is giving an instruction" apart from "the user is
+overriding the system's instructions". *"Ignore my previous message, I
+pasted the wrong file"* and *"Ignore all previous instructions"* are the
+same words doing opposite jobs, and nothing in the sentence says which.
+
+So the decision is no-go on blocking, go on logging. Patterns still block
+the famous phrasings, where a literal match means what it says. The model
+only ever writes to the log, enforced in code rather than left to the rules
+file. Written up in docs/injection-detection.md with every number in it,
+including the ones that do not flatter us.
+
+**Two test bugs of my own, both instructive.** One asserted a middling score
+using a sentence that happened to be one of the examples word for word, so
+it scored 1.00 and blocked. The other hashed words with `hash()` to build a
+fake embedder -- and Python randomises string hashing per process, so the
+test failed about one run in five. A flaky test, of exactly the kind this
+project has already paid for once, written while adding tests for everything
+else.
+
+And a third, caught by the clock rather than by a failure: the suite went
+from under a second to forty-two. The score was being patched, but `check`
+still resolved `model or get_model()` to build its argument, so the real
+80MB model loaded on every one of those tests to answer nothing.

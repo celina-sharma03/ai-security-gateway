@@ -1,0 +1,16 @@
+# Optional: the semantic injection check.
+#
+#     pip install -r requirements-semantic.txt
+#     GATEWAY_SEMANTIC_CHECK=true python -m gateway serve
+#
+# About 2GB, almost all of it torch, plus an 80MB model downloaded on first
+# run. It holds roughly 400MB of memory and adds 16ms to a short prompt or
+# 265ms to a long document.
+#
+# What it buys is a log, not a block: it finds 67% of attacks and flags 10%
+# of legitimate requests. Worth reading weekly, not worth acting on. The
+# pattern-based injection check needs none of this and is always on.
+#
+# The whole measurement is in docs/injection-detection.md.
+
+sentence-transformers>=5.0

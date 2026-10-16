@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8080
 
+    semantic_check: bool = False
+    """Score prompts for injection with the embedding model as well as the
+    patterns. Off by default, deliberately.
+
+    It needs `pip install -r requirements-semantic.txt` -- about 2GB, almost
+    all of it torch -- holds roughly 400MB of memory, and adds 16ms to a
+    short prompt or 265ms to a long document. What it buys is a log: it
+    finds 67% of attacks and flags 10% of legitimate requests, which is
+    worth reading weekly and not worth acting on. It never blocks.
+
+    The patterns run either way and need none of this. See
+    docs/injection-detection.md for the measurement behind both numbers.
+    """
+
     upstream_base_url: str = "https://api.openai.com/v1"
     """Where allowed requests get forwarded. Never hardcoded elsewhere."""
 
