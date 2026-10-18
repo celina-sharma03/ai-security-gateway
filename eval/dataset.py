@@ -37,6 +37,12 @@ DOWNLOADED_DIR = DATA_DIR / "downloaded"
 #: can be reported per family instead of as one average.
 INJECTION_NEGATIVE_FILE = DATA_DIR / "injection_negative.yaml"
 
+#: Written independently, graded once, never tuned against. Carries an
+#: expected action per case, so the report can say where the gateway's
+#: policy falls short of what the author thought should happen -- which is
+#: more useful than a catch rate on its own.
+INJECTION_HOLDOUT_FILE = DATA_DIR / "injection_holdout.yaml"
+
 #: Every family an attack is allowed to declare. A misspelled family would
 #: silently create a seventh family of one case and leave a real one
 #: untested, so the tests check this the same way they check KNOWN_TYPES.
@@ -257,6 +263,41 @@ def public_manifest() -> list[dict] | None:
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@dataclass(frozen=True)
+class HoldoutCase:
+    """One independently written case, and what should happen to it."""
+
+    id: str
+    text: str
+    expected_action: str
+    """block, log or allow. What the author thought should happen -- not a
+    description of what the gateway does. The gap between the two is the
+    point of the file."""
+
+    severity: str = "medium"
+    family: str | None = None
+    rationale: str | None = None
+
+    @property
+    def should_flag(self) -> bool:
+        return self.expected_action in ("block", "log")
+
+
+def load_injection_holdout() -> list[HoldoutCase]:
+    raw = yaml.safe_load(INJECTION_HOLDOUT_FILE.read_text(encoding="utf-8"))
+    return [
+        HoldoutCase(
+            id=case["id"],
+            text=case["text"],
+            expected_action=case["expected_action"],
+            severity=case.get("severity", "medium"),
+            family=case.get("family"),
+            rationale=case.get("rationale"),
+        )
+        for case in raw["cases"]
+    ]
 
 
 def attack_summary() -> list[FamilyCounts]:

@@ -151,3 +151,74 @@ def _verdict(attacks: Sequence[Attack], benign: Sequence[Attack], public: Sequen
         real = tally([c.text for c in public if c.attack])
         print(f"\nOn real attacks nobody here wrote: {real.rate:.0%}.")
         print("That number is the one to quote. The rest is our own homework.")
+
+
+# --- The holdout --------------------------------------------------------
+# Written independently, graded once. Every other number in this phase was
+# measured on cases written alongside the code being measured.
+
+
+def _actual_action(text: str, *, semantic: bool) -> str:
+    """What the gateway would really do with this text, as a word."""
+    result = injection.check(text, rules=RULES)
+    if result.action is not Action.ALLOW:
+        return result.action.value
+
+    if not semantic:
+        return "allow"
+
+    from gateway.engine.checks import semantic as model
+
+    scored = model.check(text, rules=RULES)
+    return scored.action.value
+
+
+def holdout_report(*, semantic: bool = False) -> None:
+    """Score the independently written cases, expected against actual."""
+    from eval.dataset import load_injection_holdout
+
+    cases = load_injection_holdout()
+
+    print("Holdout -- written independently, graded once, never tuned against")
+    print(f"{len(cases)} cases, semantic check {'on' if semantic else 'off'}\n")
+
+    print(f"  {'ID':<6}{'SEVERITY':<10}{'EXPECTED':<10}{'ACTUAL':<10}{'':<6}FAMILY")
+
+    met = shortfall = missed = 0
+    gaps = []
+    for case in cases:
+        actual = _actual_action(case.text, semantic=semantic)
+
+        if actual == case.expected_action:
+            mark, met = "ok", met + 1
+        elif actual == "allow":
+            # Nothing happened at all. The case was not detected.
+            mark, missed = "MISS", missed + 1
+            gaps.append((case, actual))
+        else:
+            # Detected, but acted on more weakly than the author wanted --
+            # expected a block, got a log. Worth separating from a miss,
+            # because the gateway did see it.
+            mark, shortfall = "weak", shortfall + 1
+            gaps.append((case, actual))
+
+        print(
+            f"  {case.id:<6}{case.severity:<10}{case.expected_action:<10}"
+            f"{actual:<10}{mark:<6}{case.family or '-'}"
+        )
+
+    print(f"\n  as expected   {met}/{len(cases)}")
+    print(f"  weaker        {shortfall}   (seen, but acted on more weakly than asked)")
+    print(f"  missed        {missed}   (not detected at all)")
+
+    high = [c for c, _ in gaps if c.severity == "high"]
+    if high:
+        print(f"\n  Of the {len(gaps)} not met, {len(high)} are high severity:")
+        for case in high:
+            print(f"    {case.id}  {' '.join(case.text.split())[:58]}")
+
+    allows = [c for c in cases if c.expected_action == "allow"]
+    if not allows:
+        print("\n  No cases expect `allow`, so this set measures the catch rate and")
+        print("  says nothing about false alarms -- which is the constraint that")
+        print("  ruled out blocking in the first place.")
