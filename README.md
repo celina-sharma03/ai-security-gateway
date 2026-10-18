@@ -23,8 +23,16 @@ addresses and UPI IDs — forwards what is left to your provider, and records
 what happened without recording what was said. It holds the provider key, so
 there is nothing on a developer's machine to route around it with.
 
-Next, in V2: prompt-injection detection, streaming, and a dashboard. The plan
-is in [DECISIONS.md](DECISIONS.md), and everything V1 does **not** protect
+**Prompt-injection detection records, it does not block** -- except for a
+small set of famous phrasings matched literally. That is a decision made
+after measuring, and the measurement is in
+[docs/injection-detection.md](docs/injection-detection.md): a purpose-built
+700MB classifier catches more attacks than we do and flags 37% of legitimate
+requests, including "Skip the explanation and just give me the SQL". Nobody
+has solved this well enough to act on automatically.
+
+Next, in V2: streaming and a dashboard. The plan is in
+[DECISIONS.md](DECISIONS.md), and everything this does **not** protect
 against is in [docs/what-it-protects.md](docs/what-it-protects.md).
 
 ---

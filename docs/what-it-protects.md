@@ -75,6 +75,20 @@ charged for invoice 1234567890123456` would redact the invoice number, which
 is the exact failure the checksum exists to prevent. Words like "invoice",
 "order" and "reference" nearby rule the match out entirely.
 
+### Prompt injection, mostly
+
+The famous phrasings are blocked. Everything else is **recorded, not
+stopped**: at 67% of attacks caught and 10% of legitimate requests flagged,
+automatic blocking would interrupt one request in ten and the gateway would
+be switched off inside a week.
+
+Read [injection-detection.md](injection-detection.md) before relying on this
+for anything. The short version is that a purpose-built 700MB classifier,
+measured on the same cases, catches more and flags 37% -- so the limit is the
+problem, not our implementation of it.
+
+Treat the injection log as a smoke alarm, not a lock.
+
 ### A typo
 
 Detection leans on the words around a value, so `adhar` is handled but
@@ -83,11 +97,6 @@ through untouched.
 
 The failure is in the safe direction — a typo makes the gateway **miss**, never
 over-redact — but it is a real gap and not a theoretical one.
-
-### Prompt injection and jailbreaks
-
-Nothing in V1 looks at what a prompt is trying to *make the model do*. That is
-Phase 7, and it is a different kind of detection entirely.
 
 ### What comes back
 

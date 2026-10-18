@@ -1,4 +1,4 @@
-3# Prompt-injection detection: what it does, and what it will not do
+# Prompt-injection detection: what it does, and what it will not do
 
 **Short version: this gateway records prompt-injection attempts. It does not
 block them, except for a small set of famous phrasings matched literally.**
