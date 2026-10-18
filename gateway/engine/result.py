@@ -99,6 +99,14 @@ class CheckResult:
     reason: str | None = None
     """Human-readable, safe to log. Must never contain the secret itself."""
 
+    coverage: float | None = None
+    """How much of the text this check actually read, 0 to 1.
+
+    None means all of it, which is true of every pattern-based check. The
+    semantic check stops after three windows, and a verdict on part of a
+    document has to say so -- otherwise a low score reads as "nothing here"
+    when it means "nothing in the first 600 words"."""
+
     @property
     def changed_text(self) -> bool:
         return self.text is not None

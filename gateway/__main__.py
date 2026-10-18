@@ -227,19 +227,46 @@ def _show_events(events: list) -> None:
         return
 
     print(
-        f"{'WHEN':<18}{'TENANT':<14}{'KEY':<20}{'ACTION':<9}"
-        f"{'CATEGORIES':<24}{'TOKENS':>8}{'MS':>7}"
+        f"{'WHEN':<12}{'TENANT':<12}{'KEY':<14}{'ACTION':<8}{'FOUND':<26}"
+        f"{'SCORE':>6}{'READ':>6}{'TOKENS':>7}{'MS':>6}"
     )
 
     for event in events:
-        categories = ",".join(sorted(c.category for c in event.categories)) or "-"
+        # "injection by semantic" rather than "injection". Patterns block and
+        # the model only logs, so without the check name the two are the same
+        # line and the decision cannot be audited from the log.
+        found = (
+            ",".join(
+                sorted(
+                    f"{c.category}:{c.found_by}" if c.found_by else c.category
+                    for c in event.categories
+                )
+            )
+            or "-"
+        )
+
+        score = "-" if event.injection_score is None else f"{event.injection_score:.2f}"
+
+        # Only shown when it is not 100%. A column of "100%" on every row
+        # teaches the reader to stop looking at it, which is the opposite of
+        # what a truncation warning is for.
+        read = (
+            f"{event.coverage_pct}%"
+            if event.coverage_pct is not None and event.coverage_pct < 100
+            else "-"
+        )
+
+        # "which key did this come from" is the question asked after
+        # something goes wrong, so the key stays on every row even though the
+        # table is now crowded.
         key = event.api_key.prefix if event.api_key else "-"
+
         print(
-            f"{event.at.strftime('%Y-%m-%d %H:%M'):<18}"
-            f"{event.tenant.name:<14}{key:<20}{event.action:<9}"
-            f"{categories[:23]:<24}"
-            f"{event.total_tokens if event.total_tokens is not None else '-':>8}"
-            f"{event.latency_ms if event.latency_ms is not None else '-':>7}"
+            f"{event.at.strftime('%m-%d %H:%M'):<12}"
+            f"{event.tenant.name[:11]:<12}{key[:13]:<14}{event.action:<8}"
+            f"{found[:25]:<26}{score:>6}{read:>6}"
+            f"{event.total_tokens if event.total_tokens is not None else '-':>7}"
+            f"{event.latency_ms if event.latency_ms is not None else '-':>6}"
         )
 
 

@@ -251,6 +251,14 @@ async def chat_completions(
     action = max((result.action for result in results), default=Action.ALLOW)
     categories = sorted({category for result in results for category in result.categories})
 
+    # One pipeline run per message, so these aggregate across the whole
+    # request: every (category, check) pair that fired anywhere in it, the
+    # highest score anything scored, and the least of the text any check
+    # managed to read.
+    found_by = sorted({pair for result in results for pair in result.found_by})
+    scores = [result.score for result in results if result.score is not None]
+    seen = [result.coverage for result in results if result.coverage is not None]
+
     # The verdict, for anything reading by machine. The body carries the
     # provider's answer, so this is the only place a client can see what the
     # gateway did without being told.
@@ -341,11 +349,13 @@ async def chat_completions(
         mode=settings.mode.value,
         decided=decided.value,
         action=action.value,
-        categories=categories,
+        categories=found_by,
         usage=counted,
         upstream_status=upstream_status,
         latency_ms=int((time.perf_counter() - started) * 1000),
         error=error,
+        injection_score=max(scores) if scores else None,
+        coverage=min(seen) if seen else None,
     )
 
     return response

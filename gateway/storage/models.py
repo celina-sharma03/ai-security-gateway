@@ -27,7 +27,7 @@ just refuses to do it quietly.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, TypeDecorator
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, TypeDecorator
 from sqlalchemy import UniqueConstraint as Unique
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -175,6 +175,23 @@ class Event(Base):
     upstream_status: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
 
+    injection_score: Mapped[float | None] = mapped_column(Float)
+    """How suspicious the semantic check found this prompt, 0 to 1.
+
+    The score is the log. Without it every entry the model writes looks
+    identical, and "show me the most suspicious thing this week" -- the only
+    way anyone would actually use a log-only detector -- cannot be asked.
+    Null when the semantic check did not run, which is the default."""
+
+    coverage_pct: Mapped[int | None] = mapped_column(Integer)
+    """How much of the prompt the semantic check actually read, as a
+    percentage.
+
+    It reads the first three windows, about 600 words, and stops. A low score
+    on a document we read 12% of is not the same claim as a low score on one
+    we read all of, and a log that cannot tell them apart invites the wrong
+    conclusion. Null when the check did not run; 100 when it read everything."""
+
     error: Mapped[str | None] = mapped_column(String(100))
     """The type of failure only -- "UpstreamTimeout" -- never a message. The
     same rule as the pipeline and UpstreamError: a message can quote the text
@@ -197,10 +214,24 @@ class EventCategory(Base):
     """
 
     __tablename__ = "event_categories"
-    __table_args__ = (Unique("event_id", "category"),)
+    # Named, because an unnamed constraint cannot be dropped by a migration:
+    # Alembic generated a downgrade reading drop_constraint(None) with a
+    # warning that it would fail as rendered.
+    __table_args__ = (
+        Unique("event_id", "category", "found_by", name="uq_event_category_found_by"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
     category: Mapped[str] = mapped_column(String(50), index=True)
+
+    found_by: Mapped[str | None] = mapped_column(String(20), index=True)
+    """Which check found it -- "redaction", "injection", "semantic".
+
+    Patterns block and the model only logs, which is the decision this whole
+    phase came to. Without this column those two are the same row in the
+    database, and the decision cannot be audited from the data the gateway
+    keeps. It is part of the unique constraint because one category found by
+    two checks is two facts, not a duplicate."""
 
     event: Mapped[Event] = relationship(back_populates="categories")

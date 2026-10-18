@@ -246,4 +246,5 @@ def check(
         ),
         text=None,
         reason=reason,
+        coverage=result.coverage,
     )

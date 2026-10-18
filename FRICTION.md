@@ -1031,3 +1031,35 @@ And a third, caught by the clock rather than by a failure: the suite went
 from under a second to forty-two. The score was being patched, but `check`
 still resolved `model or get_model()` to build its argument, so the real
 80MB model loaded on every one of those tests to answer nothing.
+
+**Hit my own documented trap, two days after documenting it.** The new
+columns were built, the tests passed, and the proof run through the live
+proxy produced this:
+
+    ACTION  FOUND              SCORE
+    log     injection              -
+
+No check name, no score. The code was right. The server answering the
+requests had been started before any of it existed, and had been sitting
+there for two days with the old code in memory.
+
+This is the third time in this project a stale listener has produced a wrong
+answer that looked like a real one -- a container test answered by a local
+server in Phase 6, a Phase 4 build answering injection checks earlier in this
+phase, and now this. The entry written two days ago says the habit is to
+**ask what is answering before believing what it says**, and I did not do it.
+
+Writing a lesson down is not the same as having learned it. What would
+actually have caught this is a habit with no judgement in it: restart the
+server as the first step of any proof run, not as the thing you try after the
+output looks wrong.
+
+**And a smaller one, in the same run.** Capturing a gateway key with
+
+    grep -oE "gw_live_[A-Za-z0-9]+"
+
+returned 25 characters of a 51-character key, because the key alphabet is
+URL-safe base64 and includes `-` and `_`. The truncated key authenticated
+against nothing and the request simply failed. A regex written from an
+assumption about an alphabet, where the real alphabet was two characters
+wider.

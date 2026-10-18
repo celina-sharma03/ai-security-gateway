@@ -58,6 +58,43 @@ class PipelineResult:
         return frozenset().union(*(result.categories for result in self.results))
 
     @property
+    def found_by(self) -> tuple[tuple[str, str], ...]:
+        """Every (category, check) pair, so the record can say which check
+        found what.
+
+        Patterns block and the semantic check only logs. Recorded as one
+        category this would be a single indistinguishable row, and the
+        decision could not be audited from the gateway's own data.
+        """
+        pairs = {
+            (category, result.check) for result in self.results for category in result.categories
+        }
+        return tuple(sorted(pairs))
+
+    @property
+    def score(self) -> float | None:
+        """The highest score any check attached to a finding.
+
+        None when nothing scored, which is every request a pattern-only
+        gateway sees -- patterns do not produce scores, because a pattern
+        either matched or it did not.
+        """
+        scores = [
+            finding.score
+            for result in self.results
+            for finding in result.findings
+            if finding.score is not None
+        ]
+        return max(scores) if scores else None
+
+    @property
+    def coverage(self) -> float | None:
+        """The least any check read, 0 to 1. None when every check read it
+        all."""
+        seen = [r.coverage for r in self.results if r.coverage is not None]
+        return min(seen) if seen else None
+
+    @property
     def mapping(self) -> dict[str, str]:
         """Placeholder to original, for restoring values in the response.
 

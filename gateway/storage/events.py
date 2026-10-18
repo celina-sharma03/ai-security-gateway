@@ -36,11 +36,13 @@ async def record(
     mode: str,
     decided: str,
     action: str,
-    categories: list[str],
+    categories: list[str] | list[tuple[str, str]],
     usage: Usage | None = None,
     upstream_status: int | None = None,
     latency_ms: int | None = None,
     error: str | None = None,
+    injection_score: float | None = None,
+    coverage: float | None = None,
 ) -> Event:
     """Write one event. Raises if it cannot -- see `record_safely`."""
     counts = usage or Usage()
@@ -59,8 +61,20 @@ async def record(
         upstream_status=upstream_status,
         latency_ms=latency_ms,
         error=error,
+        injection_score=injection_score,
+        coverage_pct=None if coverage is None else round(coverage * 100),
     )
-    event.categories = [EventCategory(category=category) for category in categories]
+
+    # Callers may pass bare category names or (category, check) pairs. The
+    # pairs are what the gateway sends; the bare form is kept because a
+    # caller that does not know which check found something should not be
+    # forced to invent an answer.
+    event.categories = [
+        EventCategory(category=found, found_by=None)
+        if isinstance(found, str)
+        else EventCategory(category=found[0], found_by=found[1])
+        for found in categories
+    ]
 
     session.add(event)
     await session.commit()
