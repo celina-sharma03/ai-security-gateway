@@ -280,6 +280,19 @@ class HoldoutCase:
     family: str | None = None
     rationale: str | None = None
 
+    category: str | None = None
+    """On a case that must pass, what kind of legitimate request it is.
+    Separate from `family`, which names an attack family -- a security
+    question and a jailbreak are not two values of one field."""
+
+    difficulty: str | None = None
+    """hard or easy, on a case that must pass.
+
+    Two different failures. Flagging a hard one is the real limit of the
+    approach, because the words genuinely overlap with an attack. Flagging
+    an easy one means something is badly broken, and averaging the two
+    together hides which has happened."""
+
     @property
     def should_flag(self) -> bool:
         return self.expected_action in ("block", "log")
@@ -295,6 +308,8 @@ def load_injection_holdout() -> list[HoldoutCase]:
             severity=case.get("severity", "medium"),
             family=case.get("family"),
             rationale=case.get("rationale"),
+            category=case.get("category"),
+            difficulty=case.get("difficulty"),
         )
         for case in raw["cases"]
     ]

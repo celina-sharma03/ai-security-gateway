@@ -178,15 +178,19 @@ def holdout_report(*, semantic: bool = False) -> None:
     from eval.dataset import load_injection_holdout
 
     cases = load_injection_holdout()
+    attacks = [c for c in cases if c.expected_action != "allow"]
+    allows = [c for c in cases if c.expected_action == "allow"]
 
     print("Holdout -- written independently, graded once, never tuned against")
-    print(f"{len(cases)} cases, semantic check {'on' if semantic else 'off'}\n")
+    print(f"{len(cases)} cases: {len(attacks)} must be caught, {len(allows)} must pass")
+    print(f"semantic check {'on' if semantic else 'off'}\n")
 
+    print("MUST BE CAUGHT\n")
     print(f"  {'ID':<6}{'SEVERITY':<10}{'EXPECTED':<10}{'ACTUAL':<10}{'':<6}FAMILY")
 
     met = shortfall = missed = 0
     gaps = []
-    for case in cases:
+    for case in attacks:
         actual = _actual_action(case.text, semantic=semantic)
 
         if actual == case.expected_action:
@@ -207,7 +211,7 @@ def holdout_report(*, semantic: bool = False) -> None:
             f"{actual:<10}{mark:<6}{case.family or '-'}"
         )
 
-    print(f"\n  as expected   {met}/{len(cases)}")
+    print(f"\n  as expected   {met}/{len(attacks)}")
     print(f"  weaker        {shortfall}   (seen, but acted on more weakly than asked)")
     print(f"  missed        {missed}   (not detected at all)")
 
@@ -217,8 +221,60 @@ def holdout_report(*, semantic: bool = False) -> None:
         for case in high:
             print(f"    {case.id}  {' '.join(case.text.split())[:58]}")
 
-    allows = [c for c in cases if c.expected_action == "allow"]
     if not allows:
         print("\n  No cases expect `allow`, so this set measures the catch rate and")
         print("  says nothing about false alarms -- which is the constraint that")
         print("  ruled out blocking in the first place.")
+        return
+
+    _holdout_false_alarms(allows, semantic=semantic)
+
+
+def _holdout_false_alarms(allows: list, *, semantic: bool) -> None:
+    """The half the catch rate cannot see.
+
+    Blocking was ruled out because 10% of legitimate requests were flagged,
+    not because of the catch rate, so a holdout without these cases cannot
+    check the decision it is supposed to be checking.
+    """
+    print("\n\nMUST PASS -- false alarms\n")
+    print(f"  {'ID':<6}{'DIFFICULTY':<12}{'ACTUAL':<10}{'':<8}WHAT IT IS")
+
+    raised = {"hard": 0, "easy": 0}
+    totals = {"hard": 0, "easy": 0}
+
+    for case in allows:
+        actual = _actual_action(case.text, semantic=semantic)
+        kind = case.difficulty or "hard"
+        totals[kind] += 1
+
+        if actual == "allow":
+            mark = "ok"
+        else:
+            # Two different failures. A hard case shares its words with a real
+            # attack, so flagging it is the known limit of the approach. An
+            # easy case resembles nothing, so flagging it is a fault.
+            mark = "FLAG" if kind == "hard" else "BROKEN"
+            raised[kind] += 1
+
+        print(f"  {case.id:<6}{kind:<12}{actual:<10}{mark:<8}{case.category or '-'}")
+
+    alarms = raised["hard"] + raised["easy"]
+    total = totals["hard"] + totals["easy"]
+    print(f"\n  false alarms  {alarms}/{total}  = {alarms / total:.0%}")
+    print(f"    on security questions  {raised['hard']}/{totals['hard']}")
+    print(f"    on ordinary work       {raised['easy']}/{totals['easy']}")
+
+    print("\n" + "-" * 66)
+    if raised["easy"]:
+        print("An ordinary request was flagged. That is not the limit of the")
+        print("approach, it is a fault: nothing in those cases resembles an")
+        print("attack, and a gateway that stops them is broken rather than")
+        print("imprecise.")
+    elif raised["hard"]:
+        print("Every false alarm is on a security question -- somebody asking")
+        print("about injection rather than attempting it. That is the limit the")
+        print("no-go decision rests on, and the expected shape of failure")
+        print("rather than a surprise.")
+    else:
+        print("Nothing legitimate was flagged.")
