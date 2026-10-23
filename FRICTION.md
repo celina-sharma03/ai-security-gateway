@@ -1063,3 +1063,44 @@ URL-safe base64 and includes `-` and `_`. The truncated key authenticated
 against nothing and the request simply failed. A regex written from an
 assumption about an alphabet, where the real alphabet was two characters
 wider.
+
+**The holdout said lower the cutoff. The tune data said no, so it stayed.**
+Eighteen independently written cases were graded, and three attacks were
+missed. Looking at why turned up something uncomfortable:
+
+    H002   0.6964      the cutoff is 0.70
+    H006   0.6571
+    H008   0.6477
+
+H002 missed by four thousandths. And across the whole holdout, dropping the
+cutoff to 0.65 would have caught two more attacks for no extra false alarms
+at all -- 7 of 10 becoming 9 of 10, apparently free.
+
+Taking it would have been the most natural thing in the world, and it would
+have destroyed the only honest number in the phase. A cutoff chosen because
+the holdout preferred it is a cutoff fitted to the holdout, and then the
+9 of 10 measures nothing except how well the fitting went.
+
+So the question went to the data we are allowed to tune on instead -- 600
+held-out public rows and our own 92 hand-written cases -- without consulting
+the holdout again:
+
+    held-out public rows        0.70  64% found, 4.3% flagged
+                                0.65  68% found, 4.7% flagged
+
+    our 92 hand-written cases   0.70  58% found, 18% flagged
+                                0.65  58% found, 20% flagged
+
+The two halves disagree. The public rows mildly prefer 0.65. Our own cases
+say it is a straight loss: not one extra attack, two more points of false
+alarms. That is not a trade-off, it is just worse.
+
+So the cutoff stays at 0.70 and the three misses stand as a recorded limit
+rather than something optimised away. H002 at 0.6964 against a 0.70 cutoff
+is now a documented fact about this gateway.
+
+What makes this worth writing down is how close it came to going the other
+way. The reported figure would have been 9 of 10 instead of 7 of 10 --
+better, defensible-sounding, and arrived at by fitting to the exam paper.
+DECISIONS.md has said "don't tune past it" since before any of this existed,
+and this is the first time that rule has actually cost something.

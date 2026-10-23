@@ -120,6 +120,57 @@ to that one collection of attacks.
 This is why the hand-written set exists. A score on held-out rows from the
 same corpus would have read 77% and meant very little.
 
+### The holdout, graded once
+
+Eighteen cases written independently of everything above — ten attacks and
+eight requests that must pass — and scored exactly once.
+
+| | |
+|---|---|
+| attacks detected | 7 / 10 — four blocked by pattern, three logged by the model |
+| missed entirely | 3, all role-play |
+| legitimate requests flagged | 1 / 8 |
+| of those, ordinary work | 0 / 4 |
+
+The model earned its place here: without it, four of the ten attacks are
+detected rather than seven. The three it added were the three phrasings
+with no equivalent in the tuned set, which is the case for keeping it.
+
+**Role-play is the weak family**, and the holdout is how we know. The tuned
+set has eight role-play cases and the family looked covered; all three
+independent misses were in it.
+
+The single false alarm quotes an attack phrase inside a question about
+detecting it. The one that passes describes the same attack instead of
+quoting it — so what trips the pattern is the quotation, not the meaning.
+
+### The cutoff the holdout asked us to move, and why it did not move
+
+All three missed attacks scored just under the line:
+
+    H002   0.6964      the cutoff is 0.70
+    H006   0.6571
+    H008   0.6477
+
+Across the holdout, a cutoff of 0.65 would have caught two more attacks for
+no extra false alarms — 7 of 10 becoming 9 of 10.
+
+It was not taken. A cutoff chosen because the holdout prefers it is a cutoff
+fitted to the holdout, and the 9 of 10 would then measure the fitting rather
+than the gateway. The question went to the data that may be tuned on
+instead:
+
+    held-out public rows        0.70  64% found, 4.3% flagged
+                                0.65  68% found, 4.7% flagged
+
+    the 92 hand-written cases   0.70  58% found, 18% flagged
+                                0.65  58% found, 20% flagged
+
+The two disagree. The public rows mildly favour 0.65; the hand-written cases
+call it a straight loss — no extra attacks, two more points of false alarms.
+That is not enough to move a number, so **the cutoff stays at 0.70 and the
+three misses stand as a recorded limit.**
+
 ## The decision
 
 **No-go on blocking. Go on logging.**
