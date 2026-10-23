@@ -44,20 +44,56 @@ buried-injection cases in the evaluation set.
 
 from dataclasses import dataclass
 
-#: Words per window. MiniLM reads about 256 word-pieces, and English runs
-#: near 1.3 word-pieces per word, so 200 words fills a window without
-#: overflowing it.
-WORDS_PER_WINDOW = 200
+#: Words per window.
+#:
+#: This was 200, which is as much as MiniLM can read at once, on the
+#: reasoning that bigger windows mean fewer of them. That reasoning was
+#: about cost and ignored what the window is for.
+#:
+#: An attack is about 25 words. Put it in a 200-word window and the
+#: embedding is five per cent attack and ninety-five per cent whatever else
+#: was in the paragraph, and the attack stops being visible. Measured: with
+#: 100 words of ordinary prose in front of them, 18 attacks the model finds
+#: on their own became 0 of 18 -- at full coverage, nothing truncated. The
+#: same attacks at 25 words per window come back.
+#:
+#: It costs almost nothing, because the work follows the total number of
+#: tokens rather than the number of windows: a 600-word document is 128ms
+#: cut into four windows and 136ms cut into twenty-eight.
+WORDS_PER_WINDOW = 25
 
 #: Words repeated from the end of one window at the start of the next.
-#: Without it, an attack split across a boundary is two halves of a sentence,
-#: and neither half means anything on its own.
-OVERLAP = 25
+#:
+#: Without it, an attack split across a boundary is two halves of a sentence
+#: and neither half means anything. With small windows it does more than
+#: that: it decides **alignment**. A real attack starts at an arbitrary word,
+#: and whether a window boundary happens to fall near that word decides
+#: whether the attack is ever seen whole.
+#:
+#: That is not a thing to reason about, so it was measured -- 17 attacks,
+#: each placed at twelve random depths in a document:
+#:
+#:     overlap 3    114/204 found    6/49 false alarms    28 windows
+#:     overlap 8    135/204          6/49                 36
+#:     overlap 12   158/204          6/49                 47
+#:     overlap 18   172/204          7/49                 86
+#:
+#: Twelve, because eighteen buys another seven points for a false alarm and
+#: twice the work. The first attempt at this number was 3, chosen to keep
+#: the window count down, and it was leaving a fifth of buried attacks
+#: unseen for no reason anybody had measured.
+OVERLAP = 12
 
-#: How many windows get scored. One number, in one place, so that the
-#: evaluation can report the catch rate at several values and the choice
-#: comes from data rather than from this comment.
-DEFAULT_MAX_WINDOWS = 3
+#: How far into a document to read, in words.
+#:
+#: Expressed in words rather than in windows, because these are two separate
+#: decisions that were tangled together while the window was 200 words wide.
+#: **Reach** is how much of a long document gets looked at, and is a
+#: latency budget. **Resolution** is how finely it is cut, and is what
+#: decides whether a short attack inside a long document is visible at all.
+#: The cap discussion was about reach; the thing that was actually hurting
+#: detection was resolution.
+WORDS_READ = 600
 
 
 @dataclass(frozen=True)
@@ -86,8 +122,8 @@ class Windowed:
         return self.words_read / self.words if self.words else 1.0
 
 
-def split(text: str, *, max_windows: int = DEFAULT_MAX_WINDOWS) -> Windowed:
-    """Cut text into overlapping windows, up to the cap.
+def split(text: str, *, words_read: int = WORDS_READ) -> Windowed:
+    """Cut the first `words_read` words into overlapping windows.
 
     Short text -- which is nearly all text -- comes back as a single window
     and costs one embedding, so the common case pays nothing for any of this.
@@ -97,7 +133,7 @@ def split(text: str, *, max_windows: int = DEFAULT_MAX_WINDOWS) -> Windowed:
     if not words:
         return Windowed(windows=(), words=0, words_read=0)
 
-    if max_windows < 1:
+    if words_read < 1:
         return Windowed(windows=(), words=len(words), words_read=0)
 
     if len(words) <= WORDS_PER_WINDOW:
@@ -109,11 +145,9 @@ def split(text: str, *, max_windows: int = DEFAULT_MAX_WINDOWS) -> Windowed:
 
     windows: list[str] = []
     furthest = 0
-    for start in range(0, len(words), step):
-        if len(windows) == max_windows:
-            break
+    for start in range(0, min(len(words), words_read), step):
         chunk = words[start : start + WORDS_PER_WINDOW]
         windows.append(" ".join(chunk))
         furthest = max(furthest, start + len(chunk))
 
-    return Windowed(windows=tuple(windows), words=len(words), words_read=furthest)
+    return Windowed(windows=tuple(windows), words=len(words), words_read=min(furthest, len(words)))

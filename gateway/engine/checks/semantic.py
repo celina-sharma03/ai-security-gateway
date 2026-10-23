@@ -157,7 +157,7 @@ def score(
     text: str,
     *,
     model: Embedder,
-    max_windows: int = windows.DEFAULT_MAX_WINDOWS,
+    words_read: int = windows.WORDS_READ,
 ) -> Scored:
     """How much the most suspicious window looks like an attack.
 
@@ -173,7 +173,7 @@ def score(
     """
     import numpy as np
 
-    split = windows.split(text, max_windows=max_windows)
+    split = windows.split(text, words_read=words_read)
 
     if not split.windows:
         return Scored(score=0.0, truncated=split.truncated, coverage=split.coverage)

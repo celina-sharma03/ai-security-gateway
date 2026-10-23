@@ -11,6 +11,7 @@ python -m eval --injection --all    every attack, with the note on each one
 python -m eval --download           fetch the public datasets (needs a network)
 python -m eval --injection --holdout            the independently written cases
 python -m eval --injection --holdout --semantic the same, with the model loaded
+python -m eval --injection --buried             how deep an attack can hide
 """
 
 import sys
@@ -132,6 +133,12 @@ def main() -> None:
         # --injection says which set; --score and --all say what to do with
         # it. Read together, for the third time now, because the first time
         # cost a holdout score that silently graded the tuned set.
+        if "--buried" in args:
+            from eval.score_injection import buried_report
+
+            buried_report()
+            return
+
         if "--holdout" in args:
             from eval.score_injection import holdout_report
 

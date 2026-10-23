@@ -1104,3 +1104,67 @@ way. The reported figure would have been 9 of 10 instead of 7 of 10 --
 better, defensible-sounding, and arrived at by fitting to the exam paper.
 DECISIONS.md has said "don't tune past it" since before any of this existed,
 and this is the first time that rule has actually cost something.
+
+**The window was the wrong size, and four experiments went by before one
+could show it.** Indirect injection scored 1 of 6, the worst family, and the
+guess was that a 200-word window drowns a 25-word attack in whatever else is
+in the paragraph. Testing that guess took four attempts, and the first three
+all produced clean-looking tables that meant nothing:
+
+1. **Chunk size, measured on our own indirect cases.** Flat at every size --
+   because those cases are 21 to 34 words long and a 200-word window holds
+   each of them whole. The experiment could not have produced a difference.
+2. **A buried-injection harness.** It reported 18 of 18 found at every depth,
+   including 2,000 words deep where only 27% of the text was read and the
+   attack was not in the scored region at all. The filler was built from the
+   negative set -- which is a set of *deliberate near-misses* -- and scored
+   0.88 on its own. Every case came back "detected" because the wrapper had
+   triggered.
+3. **Chunk size against buried attacks, capped at twelve chunks.** Smaller
+   chunks then read less of the document, so the zeros were coverage running
+   out rather than dilution.
+4. **The same, with the amount read held constant.** And the effect was
+   there the whole time.
+
+With a proper control the real number is brutal: **100 words of boring prose
+in front of an attack took 18 attacks the model finds on its own down to 0 of
+18** -- at full coverage, nothing truncated. The window cap, which took an
+hour to decide and a correction to the latency estimate, was never the
+binding limit. Dilution inside a single window was.
+
+Two numbers had been tangled into one. **Reach** is how far into a long
+document to look, and is a latency budget. **Resolution** is how finely it is
+cut, and is what decides whether a short attack inside a long document is
+visible at all. While a window was 200 words wide those were the same
+decision, and all the arguing was about the one that mattered less.
+
+Now 25-word windows over the first 600 words. Buried detection goes from
+0-2 of 18 to 13-16 of 17 at depths from 100 to 550 words, and a long document
+costs 195ms instead of 128ms.
+
+**Then the buried curve came back erratic** -- 8 of 17 at a depth of 100 and
+17 of 17 at 550 -- which is not dilution either. It is alignment: a real
+attack starts at an arbitrary word, and whether a window boundary falls near
+that word decides whether it is ever seen whole. With a 200-word window that
+hardly mattered. With a 25-word window it is most of the result, and the
+overlap had been set to 3 to keep the window count down.
+
+Measured over twelve random depths rather than a few round ones:
+
+    overlap 3    114/204 found    6/49 false alarms    28 windows
+    overlap 12   158/204          6/49                 47
+    overlap 18   172/204          7/49                 86
+
+Twelve. Eighteen buys seven more points for a false alarm and twice the work.
+
+**What it cost:** one clean attack out of 43, because a 25-word window can
+split a 35-word attack into halves that each mean less than the whole. A
+fair trade for a fifth of buried attacks, and recorded rather than hidden.
+
+**And one thing the change did not fix.** `indirect_injection` is still 1 of
+6, because our six cases are 21 to 34 words long -- "summarise this email:
+'...ignore your instructions...'" with the whole thing fitting in a window or
+two. Real indirect injection is an instruction hidden in a two-thousand-word
+document. The cases are named after the right attack and do not have its
+shape, so that 1 of 6 is measuring something else. A gap in the evaluation
+set rather than in the detector, found by fixing the detector.

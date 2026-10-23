@@ -89,6 +89,32 @@ problem, not our implementation of it.
 
 Treat the injection log as a smoke alarm, not a lock.
 
+### An injection buried deep in a long document
+
+The model that scores prompts reads about 200 words at a time, so long text
+is cut into windows — and **only the first three are scored**, roughly the
+first 600 words. Past that, the semantic check stops.
+
+Patterns still run over the whole text, so a long document keeps complete
+pattern coverage. What it loses is the paraphrase detection, for everything
+after the cap.
+
+So an instruction hidden at the bottom of a long email, contract or pasted
+web page is read by the model only if it falls in the first 600 words. The
+event records how much was read, and `gateway events` shows it in the READ
+column when it is less than all of it — so this is a number you can count in
+your own traffic rather than a risk you have to assume.
+
+Real jailbreaks run to a median of 236 words and 17% of them are longer than
+the cap, which is why the limit is three windows and not one. The number
+lives in the code as one constant and can be raised, at about 90ms per extra
+window.
+
+Indirect injection is the weakest thing this gateway does, cap or no cap:
+**1 of 6 cases** in our own evaluation, because the attack is a few words
+sitting inside a lot of innocent text and the surrounding innocence drowns
+it out.
+
 ### A typo
 
 Detection leans on the words around a value, so `adhar` is handled but

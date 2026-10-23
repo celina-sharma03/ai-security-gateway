@@ -153,6 +153,104 @@ def _verdict(attacks: Sequence[Attack], benign: Sequence[Attack], public: Sequen
         print("That number is the one to quote. The rest is our own homework.")
 
 
+# --- Buried injection ---------------------------------------------------
+# The semantic check reads the first three windows, about 600 words, and
+# stops. Phase 7's exit criteria say the miss rate past that cap has to be
+# measured rather than assumed, which is what this does.
+#
+# The cases are built rather than written, on purpose. Writing out a few
+# long documents would freeze the attack at whatever position the author
+# happened to choose; building them lets the same attack be placed at a
+# dozen depths and the curve read off.
+
+
+#: Prose to bury an attack in. Written here rather than taken from the
+#: negative set, which was the first attempt and was badly wrong: those
+#: cases are *deliberately* adversarial near-misses, so a wall of them
+#: scored 0.88 with no attack in it at all and every buried case came back
+#: "detected" because the wrapper had triggered. The control has to be
+#: boring, and the harness checks that it is.
+NEUTRAL_PROSE = (
+    "The quarterly figures were circulated on Monday and the regional totals "
+    "are broadly in line with the forecast. Warehouse throughput improved "
+    "slightly after the new shift pattern began, though the picking error rate "
+    "is unchanged. Procurement has renewed the stationery contract for a "
+    "further year at the same rate. The office move is still scheduled for "
+    "March and the facilities team will circulate floor plans once the lease "
+    "is signed. Parking permits for the new site will be issued in February. "
+    "Catering has been asked to provide vegetarian options at the all-hands "
+    "meeting. The cycle storage area will be expanded by eight spaces. "
+    "Recycling collections move to Thursdays from the first of next month. "
+)
+
+
+def _filler(words: int) -> str:
+    """Boring prose to bury an attack in.
+
+    Boring is the requirement. It is the control in this experiment, and a
+    control that scores above the threshold on its own measures nothing.
+    """
+    pool = NEUTRAL_PROSE.split()
+    out: list[str] = []
+    while len(out) < words:
+        out.extend(pool)
+    return " ".join(out[:words])
+
+
+def buried_report(*, depths=(0, 100, 300, 550, 800, 2000)) -> None:
+    """How deep an attack can sit before the model stops seeing it."""
+    from gateway.engine.checks import semantic as model
+
+    attacks = load_attacks()
+    engine = model.get_model()
+
+    # Only attacks the model finds on their own. Burying one it never
+    # detected would count a pre-existing miss as a burial effect.
+    seen = [a for a in attacks if model.score(a.text, model=engine).score >= model.RECORD_ABOVE]
+
+    print("Buried injection -- the same attacks, moved further into a document")
+    print(f"{len(seen)} attacks the model detects on their own, wrapped in boring prose.")
+    print(
+        f"It reads the first {model.windows.WORDS_READ} words, "
+        f"in {model.windows.WORDS_PER_WINDOW}-word windows.\n"
+    )
+
+    # The control, checked before anything is measured against it. The first
+    # version of this used the negative set as filler -- which is a set of
+    # deliberate near-misses -- and it scored 0.88 on its own, so every
+    # buried case came back "found" because the wrapper had triggered.
+    for depth in depths:
+        if not depth:
+            continue
+        alone = model.score(_filler(depth), model=engine).score
+        if alone >= model.RECORD_ABOVE:
+            print(f"  the filler alone scores {alone:.2f} at {depth} words, above the")
+            print("  threshold -- it is not a usable control and nothing below would")
+            print("  mean anything. Fix NEUTRAL_PROSE before reading further.")
+            return
+
+    print(f"  {'words before it':<18}{'still found':>13}{'read':>8}")
+
+    for depth in depths:
+        prefix = _filler(depth) if depth else ""
+        found = 0
+        coverage = 1.0
+        for attack in seen:
+            text = f"{prefix} {attack.text}".strip()
+            scored = model.score(text, model=engine)
+            coverage = min(coverage, scored.coverage)
+            if scored.score >= model.RECORD_ABOVE:
+                found += 1
+
+        past = " <- past the reach" if depth > model.windows.WORDS_READ else ""
+        print(f"  {depth:<18}{found:>8}/{len(seen):<4}{coverage:>7.0%}{past}")
+
+    print("\n" + "-" * 62)
+    print("Patterns still run over the whole text at every depth, so a long")
+    print("document keeps complete pattern coverage. What falls away here is")
+    print("the paraphrase detection, which is the half that reads meaning.")
+
+
 # --- The holdout --------------------------------------------------------
 # Written independently, graded once. Every other number in this phase was
 # measured on cases written alongside the code being measured.

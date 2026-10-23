@@ -5,7 +5,12 @@ DECISIONS.md is arithmetic, and arithmetic can be tested exactly. What a
 model does with the windows is a measurement, and lives in the evaluation.
 """
 
-from gateway.engine.checks.windows import OVERLAP, WORDS_PER_WINDOW, split
+from gateway.engine.checks.windows import (
+    OVERLAP,
+    WORDS_PER_WINDOW,
+    WORDS_READ,
+    split,
+)
 
 
 def words(n: int, word: str = "filler") -> str:
@@ -37,7 +42,9 @@ def test_empty_text_produces_no_windows():
 
 def test_long_text_is_split():
     result = split(words(500))
-    assert len(result.windows) == 3
+
+    assert len(result.windows) > 1
+    assert result.words == 500
 
 
 def test_each_window_fits_the_model():
@@ -57,49 +64,64 @@ def test_windows_overlap():
     assert second.split()[:OVERLAP] == tail
 
 
-def test_the_cap_stops_at_three_windows():
+# --- Reach and resolution are different numbers -------------------------
+# They were one number while a window was 200 words wide, and the confusion
+# cost a measurement: the cap was blamed for missing buried attacks when the
+# window size was doing it. Reach is a latency budget; resolution decides
+# whether a short attack inside a long document is visible at all.
+
+
+def test_reading_stops_at_the_reach():
     result = split(words(10_000))
 
-    assert len(result.windows) == 3
-    assert result.truncated, "the cap was hit and the result has to say so"
+    assert result.truncated, "the reach was hit and the result has to say so"
+    assert result.words_read <= WORDS_READ + WORDS_PER_WINDOW
     assert result.coverage < 0.1
+
+
+def test_a_window_is_small_enough_to_show_a_short_attack():
+    """The measurement behind the number.
+
+    An attack is around 25 words. In a 200-word window the embedding is a
+    twentieth attack and the rest whatever else was in the paragraph -- 18
+    attacks the model finds alone became 0 of 18 with 100 words of ordinary
+    prose in front of them, at full coverage. This is the guard on the fix.
+    """
+    assert WORDS_PER_WINDOW <= 50, (
+        "windows this wide hide a short attack inside ordinary text; "
+        "see docs/injection-detection.md"
+    )
 
 
 def test_truncation_is_reported_not_hidden():
     """The number that makes the gap honest: how much of the text was read.
-    Recorded on the event so the cap can be counted in real traffic."""
-    result = split(words(1000))
+    Recorded on the event so the reach can be counted in real traffic."""
+    result = split(words(10_000))
 
-    assert result.words == 1000
-    assert result.words_read < 1000
+    assert result.words == 10_000
+    assert result.words_read < 10_000
     assert 0 < result.coverage < 1
 
 
-def test_text_just_under_the_cap_is_fully_read():
-    """Three windows of 200 with 25 overlapping is 550 words of reach."""
-    reach = WORDS_PER_WINDOW + 2 * (WORDS_PER_WINDOW - OVERLAP)
-    result = split(words(reach))
+def test_text_within_the_reach_is_fully_read():
+    result = split(words(WORDS_READ - 10))
 
     assert not result.truncated
     assert result.coverage == 1.0
 
 
-def test_one_word_over_the_cap_is_reported_as_truncated():
-    reach = WORDS_PER_WINDOW + 2 * (WORDS_PER_WINDOW - OVERLAP)
-    result = split(words(reach + 1))
+def test_the_reach_can_be_changed():
+    """A parameter rather than a constant, so the evaluation can report the
+    catch rate at several values and the choice comes from data."""
+    near = split(words(5000), words_read=100)
+    far = split(words(5000), words_read=1000)
 
-    assert result.truncated
-    assert len(result.windows) == 3
-
-
-def test_the_cap_can_be_raised():
-    """The evaluation reports the catch rate at one, three, five and ten
-    windows, so the number has to be a parameter rather than a constant."""
-    assert len(split(words(5000), max_windows=10).windows) == 10
+    assert near.words_read < far.words_read
+    assert len(near.windows) < len(far.windows)
 
 
-def test_a_cap_of_zero_reads_nothing_and_says_so():
-    result = split(words(500), max_windows=0)
+def test_a_reach_of_zero_reads_nothing_and_says_so():
+    result = split(words(500), words_read=0)
 
     assert result.windows == ()
     assert result.truncated
