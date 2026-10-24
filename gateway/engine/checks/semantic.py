@@ -219,7 +219,13 @@ def check(
     result = score(text, model=model or get_model())
 
     if result.score < log_above:
-        return CheckResult.allow(CHECK_NAME)
+        # Nothing found -- but still say how much was looked at. This is the
+        # case the coverage number exists for: a low score on a document we
+        # read half of is not the same claim as a low score on one we read
+        # all of, and the first version of this returned a bare allow and
+        # threw the number away in exactly that situation. The event then
+        # showed an empty READ column on a 1,200-word prompt.
+        return CheckResult(check=CHECK_NAME, action=Action.ALLOW, coverage=result.coverage)
 
     # Never stronger than a log, whatever the rules asked for and whatever
     # the score is. See the docstring.

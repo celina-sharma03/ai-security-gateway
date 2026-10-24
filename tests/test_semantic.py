@@ -255,3 +255,18 @@ def test_the_finding_carries_the_score_and_no_content(scored):
 def test_the_text_is_never_rewritten(scored):
     scored(0.99)
     assert semantic.check("anything").text is None
+
+
+def test_coverage_is_reported_even_when_nothing_was_found(scored):
+    """The case the number exists for.
+
+    A low score on a document we read half of is not the same claim as a low
+    score on one we read all of. The first version returned a bare allow and
+    dropped the coverage, so a 1,200-word prompt showed an empty READ column
+    in `gateway events` -- the one place it mattered.
+    """
+    scored(0.10, truncated=True, coverage=0.5)
+    result = semantic.check("a very long document")
+
+    assert result.action is Action.ALLOW
+    assert result.coverage == pytest.approx(0.5)
