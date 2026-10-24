@@ -223,9 +223,36 @@ three misses stand as a recorded limit.**
 - **Shadow mode is still the default**, so a new install records what it would
   have done and changes nothing until an operator decides otherwise.
 
-The 700MB classifier was not adopted. It is nine times the size, roughly ten
-times slower, and wrong more often in the direction that gets security tools
-uninstalled.
+### Why the 700MB classifier is not the default, and when it should be
+
+It is not adopted as the default, and it is **not worse**. It catches more
+than this gateway does — 10 of 10 independent attacks against 7, and 88%
+against 67% on the larger set. Anyone choosing a detector on catch rate
+alone should choose it.
+
+What it costs is noise. Both detectors only write to a log, so the honest
+comparison is between two logs:
+
+| | attacks found | legitimate requests flagged |
+|---|---|---|
+| this gateway | 7 / 10 | 2 / 8 |
+| the 700MB classifier | 10 / 10 | 4 / 8 |
+
+An operator reading that log weekly could reasonably prefer either. More
+catches with more noise is a defensible trade, and which side of it you want
+depends on who sends your traffic. A support team will barely notice; a
+security team will be in the log constantly, because the classifier flags
+anything *about* prompt injection at near-certainty.
+
+The default is the small model because it is 80MB against 700, about ten
+times faster, and quieter — which suits a self-hosted box somebody has to
+run. That is a default, not a verdict.
+
+**And the classifier is not an alternative to this gateway.** It is an
+alternative *detector* inside it. The gateway holds the provider key,
+redacts cards and emails, records events per tenant and enforces shadow
+mode; the classifier takes text and returns a number. Swapping which model
+produces that number is a configuration question.
 
 ## What this means if you run it
 
