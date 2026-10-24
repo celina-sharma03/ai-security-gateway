@@ -314,6 +314,8 @@ Two things left open by Phase 5, both deliberate:
 - *the window cap recorded on the event when it is hit, visible in `gateway events`.*
 - *the cap, and what it misses, written in `docs/what-it-protects.md`.*
 
+**Met, and the answer was no.** Patterns block the famous phrasings; the model only ever logs. Blocking on the model was rejected because it flags one legitimate request in ten, and a 700MB classifier measured on the same cases flagged four in eight — every one of them a security question. The whole measurement is in [docs/injection-detection.md](docs/injection-detection.md). Indirect injection is 1 of 10 and is written up as uncovered rather than tuned away.
+
 **8 — Streaming.**
 *Exit: streaming works, and a block partway through cuts off cleanly.*
 
