@@ -342,6 +342,11 @@ async def chat_completions(
         )
     elif streaming:
         onward = provider.with_texts(body, [r.text for r in results]) if results else body
+
+        # Whether the gateway added the usage request, or the caller had an
+        # opinion of their own. It decides whether the usage event is ours
+        # to remove on the way back: a caller who asked for it keeps it.
+        asked_for_usage = "stream_options" not in onward
         onward = provider.wants_usage(onward)
 
         outgoing = dict(request.headers)
@@ -396,19 +401,41 @@ async def chat_completions(
             )
 
         async def relay() -> AsyncIterator[bytes]:
-            """Hand each chunk on as it arrives, then record what it cost.
+            """Hand each event on as it arrives, then record what it cost.
 
             The chunks are kept as well as forwarded, which is the one place
             this gateway holds a reply in memory. It is held only until the
             stream ends, never written down, and it is the only way to read
             the token counts -- they arrive in the last event.
+
+            Forwarded event by event rather than byte by byte, because the
+            usage event has to be recognised before it is passed on, and a
+            network chunk can end halfway through one.
             """
             collected: list[bytes] = []
+            buffer = b""
             try:
                 async with stack:
                     async for piece in sent.aiter_bytes():
                         collected.append(piece)
-                        yield piece
+                        buffer += piece
+
+                        while b"\n\n" in buffer:
+                            event, buffer = buffer.split(b"\n\n", 1)
+                            event += b"\n\n"
+
+                            # Removing the event the gateway itself asked
+                            # for. Not a licence to rewrite replies: this is
+                            # cleaning up a side effect of our own
+                            # bookkeeping, and only when the caller did not
+                            # ask for that event themselves.
+                            if asked_for_usage and provider.is_usage_event(event):
+                                continue
+
+                            yield event
+
+                    if buffer:
+                        yield buffer
             finally:
                 # In `finally` because a caller who hangs up halfway still
                 # used tokens, and an event missing for every abandoned

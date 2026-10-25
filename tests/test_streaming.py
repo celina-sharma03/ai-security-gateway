@@ -353,3 +353,61 @@ def test_a_broken_stream_closes_its_connection(gateway_key):
         app.dependency_overrides.clear()
 
     assert stream.closed, "the connection was left open"
+
+
+# --- Cleaning up after our own bookkeeping ------------------------------
+# The gateway adds `stream_options.include_usage` so it can record what a
+# streamed request cost. The provider answers that by sending an extra event
+# the caller never asked for -- and that event has `choices: []`, which
+# breaks the ordinary way of reading a stream:
+#
+#     for chunk in stream:
+#         print(chunk.choices[0].delta.content)   # IndexError on that event
+#
+# So the event is removed again. Not a licence to rewrite replies: the
+# gateway is removing exactly the thing it caused.
+
+
+def test_the_caller_does_not_receive_the_usage_event_they_never_asked_for(client):
+    body = client.post("/v1/chat/completions", json=STREAM_REQUEST).text
+
+    for event in events_in(body):
+        assert "usage" not in event, f"the caller got our bookkeeping: {event}"
+
+
+def test_every_event_the_caller_gets_has_choices(client):
+    """The shape their code relies on. An event with `choices: []` crashes
+    `chunk.choices[0]`, which is how most streaming examples are written."""
+    for event in events_in(client.post("/v1/chat/completions", json=STREAM_REQUEST).text):
+        assert event.get("choices"), f"an event with no choices reached the caller: {event}"
+
+
+def test_removing_it_does_not_cost_us_the_count(client, file_database):
+    """The whole point: the caller's stream is clean and the event still
+    records what the request cost."""
+    from tests.test_events import recorded
+
+    client.post("/v1/chat/completions", json=STREAM_REQUEST)
+
+    (event,) = recorded(file_database)
+    assert event.total_tokens == STUB_USAGE["total_tokens"]
+
+
+def test_a_caller_who_asked_for_usage_keeps_it(client):
+    """Their request, their event. The gateway only removes what it added."""
+    body = client.post(
+        "/v1/chat/completions",
+        json={**STREAM_REQUEST, "stream_options": {"include_usage": True}},
+    ).text
+
+    assert any("usage" in event for event in events_in(body)), (
+        "the caller asked for usage and did not get it"
+    )
+
+
+def test_the_reply_is_unchanged_by_the_removal(client):
+    """Nothing but that one event is touched."""
+    body = client.post("/v1/chat/completions", json=STREAM_REQUEST).text
+
+    assert text_of(body).strip() == "Hello! How can I help?"
+    assert body.endswith("data: [DONE]\n\n")

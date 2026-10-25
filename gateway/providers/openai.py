@@ -183,6 +183,37 @@ class OpenAIProvider:
 
         return {**body, "stream_options": {"include_usage": True}}
 
+    def is_usage_event(self, event: bytes) -> bool:
+        """True when this event is only a usage report.
+
+        Such an event carries `usage` and an empty `choices`, which is the
+        shape that breaks a caller doing `chunk.choices[0]` on everything --
+        a perfectly ordinary way to read a stream. When the gateway added
+        the flag that asks for this event, it removes the event again rather
+        than handing the consequence to somebody who never asked for it.
+
+        Checked rather than assumed: an event with usage *and* content in it
+        is still content, and is forwarded.
+        """
+        line = event.decode(errors="replace").strip()
+        if not line.startswith("data: "):
+            return False
+
+        payload = line.removeprefix("data: ").strip()
+        if payload == "[DONE]":
+            return False
+
+        try:
+            parsed = json.loads(payload)
+        except (json.JSONDecodeError, ValueError):
+            return False
+
+        return (
+            isinstance(parsed, dict)
+            and isinstance(parsed.get("usage"), dict)
+            and not parsed.get("choices")
+        )
+
     def usage_from_stream(self, raw: bytes) -> Usage:
         """The token counts out of a streamed reply.
 

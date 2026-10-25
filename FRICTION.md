@@ -1238,3 +1238,44 @@ Worth noting what it did *not* show. The second test -- that the connection
 is closed -- still passed with the recording broken, because closing is done
 by the `async with` and not by the `finally`. Two tests, one mutation, one
 of them proved. The other is still only probably real.
+
+**Asking the provider for a token count handed the caller a crash.** A
+streamed reply carries no usage unless the request asks for it, so the
+gateway adds `stream_options.include_usage` -- otherwise every streamed call
+is recorded as costing nothing, which is the Phase 5 zero all over again.
+
+The provider answers that by sending one extra event at the end. And that
+event looks like this:
+
+    {"choices": [], "usage": {"total_tokens": 16}}
+
+`choices` is **empty**, which breaks the ordinary way of reading a stream:
+
+    for chunk in stream:
+        print(chunk.choices[0].delta.content, end="")
+
+    IndexError: list index out of range
+
+An application that worked yesterday now dies on the last event of every
+reply, because of a flag its author never set. The gateway asked for
+something for its own bookkeeping and posted the bill to somebody else.
+
+So the event is removed again on the way back. Only when the gateway added
+the flag -- a caller who set `stream_options` themselves keeps their event,
+even if they set it to false and we lose the number.
+
+Two things worth keeping from this. The first is the rule it suggests: a
+proxy may change what it is deliberately there to change, and must clean up
+after everything else. Redaction is the job and the caller should see it; a
+usage event appearing because we wanted a row in a database is not.
+
+The second is that this is the first time the gateway edits a *reply*. Every
+change until now was to a request on its way out. That line is worth
+noticing as it is crossed, which is why the removal is written to be as
+narrow as it can be: one event, recognised by shape, only when we caused it.
+
+It also forced the relay to buffer. Chunks arrive as arbitrary bytes and an
+event can be split across two of them, so forwarding byte by byte makes it
+impossible to recognise an event before passing it on. The relay now
+assembles complete events and forwards those, which is what an SSE consumer
+expects anyway.
