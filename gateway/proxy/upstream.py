@@ -22,6 +22,8 @@ there is no answer to invent -- so the failure is raised and the caller is
 told the truth.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import httpx
@@ -176,6 +178,43 @@ class Upstream:
             body=response.content,
             media_type=response.headers.get("content-type", "application/json"),
         )
+
+    @asynccontextmanager
+    async def stream(
+        self, path: str, body: dict, headers: dict[str, str]
+    ) -> AsyncIterator[httpx.Response]:
+        """Forward one request and hand back the reply as it arrives.
+
+        A context manager rather than a return value, because the connection
+        has to stay open while the caller reads it. `send` above can close
+        its connection the moment it has the bytes; this one cannot, and the
+        difference is the whole reason streaming needed its own method
+        instead of a flag on that one.
+
+        The caller reads `response.aiter_bytes()` inside the `with`. Leaving
+        the block closes the connection whether the stream finished or not,
+        so a client that hangs up halfway does not leave one open.
+        """
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        request = self._client.build_request(
+            "POST", url, json=body, headers=self._authorise(forwarded_headers(headers))
+        )
+
+        try:
+            response = await self._client.send(request, stream=True)
+        except httpx.TimeoutException as exc:
+            raise UpstreamTimeout(
+                f"{type(exc).__name__}: the provider did not answer in time"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise UpstreamUnreachable(
+                f"{type(exc).__name__}: the provider could not be reached"
+            ) from exc
+
+        try:
+            yield response
+        finally:
+            await response.aclose()
 
     async def close(self) -> None:
         """Closed on shutdown, so connections aren't left open."""

@@ -139,6 +139,77 @@ class OpenAIProvider:
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         }
 
+    def blocked_stream(self, body: dict, message: str) -> bytes:
+        """The same refusal, as server-sent events.
+
+        A caller who asked for a stream has a client waiting for `data:`
+        lines. Answering with a plain JSON body instead would leave their SDK
+        parsing a stream that never comes, which is the opposite of the
+        reason blocked_response exists at all: the refusal is supposed to be
+        readable, not a different kind of crash.
+
+        Sent as one content chunk, then a stop, then `[DONE]` -- the shortest
+        thing that is a valid stream.
+        """
+        head = {
+            "id": f"chatcmpl-gateway-{uuid.uuid4().hex[:16]}",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": body.get("model", "unknown"),
+        }
+
+        events = [
+            {**head, "choices": [{"index": 0, "delta": {"role": "assistant"}}]},
+            {**head, "choices": [{"index": 0, "delta": {"content": message}}]},
+            {**head, "choices": [{"index": 0, "delta": {}, "finish_reason": "content_filter"}]},
+        ]
+
+        lines = "".join(f"data: {json.dumps(event)}\n\n" for event in events)
+        return (lines + "data: [DONE]\n\n").encode()
+
+    def wants_usage(self, body: dict) -> dict:
+        """The request, asking the provider to report what it cost.
+
+        Streaming replies carry no usage unless the request asked for it, so
+        a gateway that forwarded the request untouched would record every
+        streamed call as costing nothing -- the same misleading zero that
+        made six failed requests look like free traffic in Phase 5.
+
+        Only added when the caller did not set `stream_options` themselves.
+        Someone who has an opinion about that field keeps it.
+        """
+        if "stream_options" in body:
+            return body
+
+        return {**body, "stream_options": {"include_usage": True}}
+
+    def usage_from_stream(self, raw: bytes) -> Usage:
+        """The token counts out of a streamed reply.
+
+        A stream is `data:` lines, and the usage -- when it comes at all --
+        is in a late one with no choices in it. Everything is forgiving for
+        the same reason as `usage`: by the time this runs the caller already
+        has their answer, so an unreadable chunk means an unknown cost and
+        not a failure.
+        """
+        for line in reversed(raw.decode(errors="replace").splitlines()):
+            if not line.startswith("data: "):
+                continue
+
+            payload = line.removeprefix("data: ").strip()
+            if payload == "[DONE]":
+                continue
+
+            try:
+                event = json.loads(payload)
+            except (json.JSONDecodeError, ValueError):
+                continue
+
+            if isinstance(event, dict) and isinstance(event.get("usage"), dict):
+                return self.usage(payload.encode())
+
+        return Usage()
+
     def usage(self, raw: bytes) -> Usage:
         """The token counts out of a reply, in OpenAI's shape:
 

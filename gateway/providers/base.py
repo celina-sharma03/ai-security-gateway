@@ -74,3 +74,24 @@ class Provider(Protocol):
         """What the reply says it cost. Never raises: an unreadable reply
         means unknown usage, not a failed request."""
         ...
+
+    # --- Streaming ------------------------------------------------------
+    # A caller who asked for a stream has a client waiting for events, so
+    # everything the proxy hands back has to be one -- including a refusal,
+    # which would otherwise be a different kind of crash.
+
+    def blocked_stream(self, body: dict, message: str) -> bytes:
+        """The refusal, in this provider's streaming shape."""
+        ...
+
+    def wants_usage(self, body: dict) -> dict:
+        """The request, modified to ask for token counts on a stream.
+
+        Providers leave usage out of a streamed reply unless asked, so
+        without this every streamed request is recorded as costing nothing.
+        """
+        ...
+
+    def usage_from_stream(self, raw: bytes) -> Usage:
+        """What a streamed reply says it cost. Same forgiveness as `usage`."""
+        ...

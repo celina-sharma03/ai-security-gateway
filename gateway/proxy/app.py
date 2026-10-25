@@ -19,11 +19,12 @@ events and nothing else.
 
 import json
 import time
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gateway import __version__
@@ -277,15 +278,147 @@ async def chat_completions(
     error: str | None = None
     counted = Usage()
 
+    async def record(
+        *,
+        upstream_status: int | None = None,
+        error: str | None = None,
+        counted: Usage | None = None,
+    ) -> None:
+        """The one recording point, callable from two places now.
+
+        A streamed reply is not finished when this function returns the
+        response -- the chunks are still arriving -- so its event cannot be
+        written at the bottom of the route like every other one. It is
+        written from inside the generator instead, once the last chunk has
+        gone, which is also the only moment the token counts exist.
+
+        The session is still open then: FastAPI closes a `yield` dependency
+        after the final chunk leaves, not when the route returns. That was
+        measured before any of this was built, because if it had gone the
+        other way the event would have needed a session of its own.
+        """
+        await events.record_safely(
+            session,
+            key=key,
+            model=body.get("model") if isinstance(body.get("model"), str) else None,
+            mode=settings.mode.value,
+            decided=decided.value,
+            action=action.value,
+            categories=found_by,
+            usage=counted or Usage(),
+            upstream_status=upstream_status,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            error=error,
+            injection_score=max(scores) if scores else None,
+            coverage=min(seen) if seen else None,
+        )
+
+    # A caller who asked for a stream gets one, whatever happens -- including
+    # a refusal. Answering a streaming request with a plain JSON body leaves
+    # their SDK waiting for events that never come, which is a worse failure
+    # than the one blocking was meant to avoid.
+    streaming = body.get("stream") is True
+
     # `action` is already mode-aware: in shadow mode the pipeline turns a block
     # into a log, so this branch is simply never taken there. The mode logic
     # lives in the pipeline and is not repeated here.
     if action is Action.BLOCK:
+        refusal = refusal_message(categories)
+
+        if streaming:
+
+            async def refusal_events() -> AsyncIterator[bytes]:
+                yield provider.blocked_stream(body, refusal)
+                await record()
+
+            return StreamingResponse(
+                refusal_events(), media_type="text/event-stream", headers=headers
+            )
+
         response: Response = JSONResponse(
             status_code=200,
-            content=provider.blocked_response(body, refusal_message(categories)),
+            content=provider.blocked_response(body, refusal),
             headers=headers,
         )
+    elif streaming:
+        onward = provider.with_texts(body, [r.text for r in results]) if results else body
+        onward = provider.wants_usage(onward)
+
+        outgoing = dict(request.headers)
+        if getattr(request.state, "strip_authorization", False):
+            outgoing.pop("authorization", None)
+
+        # The connection is opened here rather than inside the generator, so
+        # that a provider which is down produces a 504 the caller can read.
+        # Once the first chunk has gone the status line is already sent and
+        # there is no way left to say "this failed" -- the caller would get a
+        # 200 that simply stops.
+        stack = AsyncExitStack()
+        try:
+            sent = await stack.enter_async_context(
+                upstream.stream("/chat/completions", onward, outgoing)
+            )
+        except UpstreamNotConfigured as exc:
+            await stack.aclose()
+            await record(error=type(exc).__name__)
+            return JSONResponse(
+                status_code=500,
+                content=error_body(str(exc), "gateway_misconfigured"),
+                headers=headers,
+            )
+        except UpstreamTimeout as exc:
+            await stack.aclose()
+            await record(error=type(exc).__name__)
+            return JSONResponse(
+                status_code=504, content=error_body(str(exc), "upstream_timeout"), headers=headers
+            )
+        except UpstreamUnreachable as exc:
+            await stack.aclose()
+            await record(error=type(exc).__name__)
+            return JSONResponse(
+                status_code=502,
+                content=error_body(str(exc), "upstream_unreachable"),
+                headers=headers,
+            )
+
+        if sent.status_code != 200:
+            # Not a stream at all -- a 429 or a 400 comes back as an ordinary
+            # body. Read it and pass it through as the provider sent it,
+            # because the caller needs their answer and not a stream of one.
+            async with stack:
+                failed = await sent.aread()
+            await record(upstream_status=sent.status_code)
+            return Response(
+                content=failed,
+                status_code=sent.status_code,
+                media_type=sent.headers.get("content-type", "application/json"),
+                headers=headers,
+            )
+
+        async def relay() -> AsyncIterator[bytes]:
+            """Hand each chunk on as it arrives, then record what it cost.
+
+            The chunks are kept as well as forwarded, which is the one place
+            this gateway holds a reply in memory. It is held only until the
+            stream ends, never written down, and it is the only way to read
+            the token counts -- they arrive in the last event.
+            """
+            collected: list[bytes] = []
+            try:
+                async with stack:
+                    async for piece in sent.aiter_bytes():
+                        collected.append(piece)
+                        yield piece
+            finally:
+                # In `finally` because a caller who hangs up halfway still
+                # used tokens, and an event missing for every abandoned
+                # request is a hole in the audit trail.
+                await record(
+                    upstream_status=sent.status_code,
+                    counted=provider.usage_from_stream(b"".join(collected)),
+                )
+
+        return StreamingResponse(relay(), media_type="text/event-stream", headers=headers)
     else:
         # Same again: `result.text` is what the pipeline says should go onward
         # -- the redacted text in enforce mode, the original in shadow.
@@ -342,20 +475,6 @@ async def chat_completions(
     # next to a provider call that took half a second; if it ever stops being
     # one, this moves to a background task with a session of its own, because
     # a dependency's session is closed before background tasks run.
-    await events.record_safely(
-        session,
-        key=key,
-        model=body.get("model") if isinstance(body.get("model"), str) else None,
-        mode=settings.mode.value,
-        decided=decided.value,
-        action=action.value,
-        categories=found_by,
-        usage=counted,
-        upstream_status=upstream_status,
-        latency_ms=int((time.perf_counter() - started) * 1000),
-        error=error,
-        injection_score=max(scores) if scores else None,
-        coverage=min(seen) if seen else None,
-    )
+    await record(upstream_status=upstream_status, error=error, counted=counted)
 
     return response
