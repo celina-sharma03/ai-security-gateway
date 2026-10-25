@@ -13,6 +13,15 @@ file and lets the app do the rest.
 """
 
 import asyncio
+import os
+
+# Before anything imports gateway.settings. The suite must not read the
+# developer's own `.env`: configuring the gateway for real -- a provider key,
+# enforce mode -- made five tests fail, including the one asserting that a
+# fresh install defaults to shadow mode. A test suite that breaks when the
+# project is set up the way its README says is a test suite nobody can trust
+# to mean anything.
+os.environ["GATEWAY_ENV_FILE"] = ""
 
 import pytest
 import pytest_asyncio

@@ -41,7 +41,26 @@ def engine() -> AsyncEngine:
     """
     global _engine
     if _engine is None:
-        _engine = create_async_engine(settings.database_url, future=True)
+        _engine = create_async_engine(
+            settings.database_url,
+            future=True,
+            # Check a pooled connection is alive before handing it out.
+            #
+            # Found with streaming. When a caller closes the tab partway
+            # through a streamed reply, the request task is cancelled while
+            # its connection is still checked out, and a broken one goes
+            # back to the pool. The *next* request then fails -- before its
+            # own route runs, on the query that looks up the API key:
+            #
+            #     sqlite3.OperationalError: no active connection
+            #     [SQL: SELECT ... FROM api_keys WHERE api_keys.hash = ?]
+            #
+            # So one person closing a browser tab made the next person's
+            # request fail with a 500. Without streaming this was rare
+            # enough never to be seen; with it, closing a tab mid-answer is
+            # the most ordinary thing a user does.
+            pool_pre_ping=True,
+        )
     return _engine
 
 

@@ -54,3 +54,24 @@ def test_a_wrong_value_is_still_an_error():
 
     with pytest.raises(ValidationError):
         Settings(mode="enforc")
+
+
+def test_the_suite_does_not_read_a_local_env_file():
+    """The guard on the bug that made this file fail.
+
+    Settings read `.env` by default, including when the tests ran. So the
+    moment the gateway was configured for real -- a provider key, enforce
+    mode, the setup the README asks for -- five tests started failing,
+    among them the one asserting that a fresh install defaults to shadow.
+
+    It had been true since Phase 0 and was invisible until somebody used the
+    project the way its own instructions describe. conftest.py sets
+    GATEWAY_ENV_FILE to empty before anything imports settings; this fails
+    if that goes away.
+    """
+    import os
+
+    assert os.environ.get("GATEWAY_ENV_FILE") == "", (
+        "the suite is reading a local .env and its results depend on it"
+    )
+    assert Settings().mode is Mode.SHADOW, "a default came from somewhere other than the code"

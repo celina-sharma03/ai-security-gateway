@@ -1279,3 +1279,62 @@ event can be split across two of them, so forwarding byte by byte makes it
 impossible to recognise an event before passing it on. The relay now
 assembles complete events and forwards those, which is what an SSE consumer
 expects anyway.
+
+**Closing a browser tab broke the next person's request.** Streaming was
+built, 590 tests passed, and the first real request through it to Groq
+worked. The second came back 500.
+
+It reproduced exactly once the pattern was spotted: the request *before* the
+failure had been piped through `head -c 1200`, which closes the pipe partway
+through -- a client hanging up mid-stream, which is what a person closing a
+tab does. Then the next request fails, before its own route runs, on the
+query that looks up the API key:
+
+    sqlite3.OperationalError: no active connection
+    [SQL: SELECT ... FROM api_keys WHERE api_keys.hash = ?]
+
+The first guess was the `await record(...)` in the `finally`, running during
+cancellation and leaving a half-finished write. Testing that -- skipping the
+write entirely when the client hangs up -- made the *second* following
+request succeed and the first still fail. Wrong cause, and the experiment
+said so rather than the reasoning.
+
+The actual cause is broader: the request task is cancelled while its
+database connection is still checked out, and a broken connection goes back
+to the pool. The next request takes it and dies. One line fixes it,
+`pool_pre_ping=True`, which checks a pooled connection is alive before
+handing it out. Verified with three more rounds of hanging up mid-stream.
+
+What makes this worth the entry is that no test could have found it. The
+test client reads a response whole; it has no way to hang up halfway. The
+bug needed a real provider, a real stream slow enough to interrupt, and a
+command that happened to close a pipe early. Two hundred milliseconds of
+accident.
+
+And it had been latent all along. Cancelling a request mid-flight has always
+been able to poison the pool; without streaming, requests finish too quickly
+for anyone to interrupt one. Streaming did not create the bug, it made the
+bug reachable.
+
+**Then the test suite started failing, because the gateway had been
+configured.** Setting up `.env` with a real Groq key and enforce mode made
+five tests fail at once, among them:
+
+    def test_defaults_to_shadow_mode():
+        assert settings.mode is Mode.SHADOW
+    AssertionError: assert <Mode.ENFORCE> is <Mode.SHADOW>
+
+Settings read `.env` by default, and so did the tests. So the suite was
+quietly measuring whatever the developer happened to have configured, and
+the moment somebody set the project up the way the README tells them to, it
+broke.
+
+Latent since Phase 0, and invisible until the project was used as
+documented. The clean-machine test in Phase 6 could not have caught it
+either -- that ran the instructions on a machine with no `.env`, which is
+the half of the lifecycle where this works fine.
+
+Fixed by making the env file a setting of its own, with `conftest.py`
+emptying it before anything imports settings. A test suite whose results
+depend on the developer's local configuration is a test suite that means
+something different for every person who runs it.

@@ -3,6 +3,7 @@
 Anything configurable lives here. Nothing reads os.environ directly.
 """
 
+import os
 from enum import Enum
 from pathlib import Path
 
@@ -28,7 +29,17 @@ class Mode(str, Enum):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="GATEWAY_",
-        env_file=".env",
+        # Normally `.env`, and nothing when GATEWAY_ENV_FILE is set to an
+        # empty string.
+        #
+        # That escape hatch exists because the test suite was reading the
+        # developer's own `.env`. Configure the gateway for real -- a
+        # provider key, enforce mode -- and five tests started failing,
+        # including the one asserting that a fresh install defaults to
+        # shadow. It had always been true and was invisible until somebody
+        # actually set the thing up, which is to say: until it was used the
+        # way the README tells people to use it.
+        env_file=os.environ.get("GATEWAY_ENV_FILE", ".env") or None,
         env_file_encoding="utf-8",
         extra="ignore",
     )

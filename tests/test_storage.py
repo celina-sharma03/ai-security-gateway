@@ -171,3 +171,31 @@ async def test_two_tenants_traffic_can_be_told_apart(db):
     ).scalar_one()
 
     assert cards == 2
+
+
+def test_the_pool_checks_a_connection_before_handing_it_out():
+    """Found with streaming, against a real provider.
+
+    When a caller closes the tab partway through a streamed reply, the
+    request task is cancelled while its database connection is still checked
+    out, and a broken one goes back to the pool. The *next* request then
+    fails before its own route even runs, on the query that looks up the API
+    key:
+
+        sqlite3.OperationalError: no active connection
+        [SQL: SELECT ... FROM api_keys WHERE api_keys.hash = ?]
+
+    One person closing a browser tab made the next person's request fail
+    with a 500. Reproduced three times, fixed by pre-ping, and verified by
+    three more rounds of hanging up mid-stream.
+
+    Asserted on the engine rather than by cancelling a real request, because
+    the test client reads a response whole and cannot hang up halfway. A
+    weaker test than the bug deserves, and better than trusting a one-line
+    setting nobody can see.
+    """
+    from gateway.storage.database import engine
+
+    assert engine().pool._pre_ping, (
+        "without pre-ping, a client hanging up mid-stream breaks the next request"
+    )
