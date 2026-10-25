@@ -190,3 +190,33 @@ def completion_stream(reply: str = CANNED_REPLY, *, usage: dict | None = None) -
         events.append(chunk(usage=usage))
     events.append("data: [DONE]\n\n")
     return "".join(events).encode()
+
+
+class BrokenStream(httpx.AsyncByteStream):
+    """A stream that stops partway through, the way a real one can.
+
+    A provider's connection can drop mid-reply: the caller already has half
+    an answer and there is no status code left to change. What the gateway
+    does next -- whether the event is still recorded, whether the connection
+    is closed -- cannot be reasoned about, only tested.
+    """
+
+    def __init__(self, chunks: list[bytes], error: Exception) -> None:
+        self.chunks = chunks
+        self.error = error
+        self.closed = False
+
+    async def __aiter__(self):
+        for piece in self.chunks:
+            yield piece
+        raise self.error
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+def breaks_after(events: int, *, reply: str = CANNED_REPLY) -> BrokenStream:
+    """A reply that sends `events` chunks and then the connection drops."""
+    whole = completion_stream(reply).decode().split("\n\n")
+    sent = [f"{line}\n\n".encode() for line in whole[:events] if line.strip()]
+    return BrokenStream(sent, httpx.ReadError("the connection dropped"))

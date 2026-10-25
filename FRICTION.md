@@ -1213,3 +1213,28 @@ when a number is bad, look at the cases producing it before theorising about
 the code. Three hypotheses, two of them tested with real experiments, and
 the answer was visible in thirty seconds of scoring four sentences in
 isolation.
+
+**A test that passes is not the same as a test that works.** Phase 8 added
+two tests for a provider whose stream drops halfway: the event should still
+be recorded, and the connection should still be closed. Both passed first
+time.
+
+That is exactly when to be suspicious. The code they cover was written from
+reasoning -- a `finally` around the recording, an `async with` around the
+connection -- and a test written by the same person, in the same hour, from
+the same reasoning, tends to pass whether the code works or not.
+
+So the code was broken on purpose. Moving the `record` call out of the
+`finally` so it only runs when the stream completes normally, and re-running:
+
+    assert len(events) == 1, "the request happened; it has to leave a trace"
+    AssertionError: assert 0 == 1
+
+The test fails when the behaviour goes, which is the only evidence that it
+was testing the behaviour at all. Thirty seconds, and the difference between
+a test and a decoration.
+
+Worth noting what it did *not* show. The second test -- that the connection
+is closed -- still passed with the recording broken, because closing is done
+by the `async with` and not by the `finally`. Two tests, one mutation, one
+of them proved. The other is still only probably real.

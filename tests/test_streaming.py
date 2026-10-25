@@ -297,3 +297,59 @@ def test_the_event_loop_is_not_blocked_while_streaming():
     Not a given: the first version of the semantic check loaded a model on
     the request path and did exactly that."""
     assert asyncio.iscoroutinefunction(Upstream.close)
+
+
+# --- When a stream stops partway ----------------------------------------
+# A provider's connection can drop mid-reply, or the caller can close the
+# tab. In both cases the status line is long gone and half an answer has
+# already been delivered. What the gateway does next is only knowable by
+# testing it.
+
+
+def broken_client(gateway_key: str, after: int):
+    """A gateway whose provider sends `after` chunks and then drops."""
+    from tests.stubs import breaks_after
+
+    stream = breaks_after(after)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=stream, headers={"content-type": "text/event-stream"})
+
+    app.dependency_overrides[get_upstream] = lambda: Upstream(
+        transport=httpx.MockTransport(handle),
+        api_key=TEST_PROVIDER_KEY,
+        passthrough=False,
+    )
+    app.dependency_overrides[get_pipeline] = lambda: build_pipeline(Mode.ENFORCE, Rules())
+    return TestClient(app, headers={"Authorization": f"Bearer {gateway_key}"}), stream
+
+
+def test_a_stream_that_breaks_partway_is_still_recorded(gateway_key, file_database):
+    """Half an answer was delivered and the provider vanished. An event
+    missing here is a hole in the audit trail for exactly the requests
+    somebody will later ask about."""
+    from tests.test_events import recorded
+
+    client, _ = broken_client(gateway_key, after=2)
+    try:
+        with pytest.raises(httpx.ReadError):
+            client.post("/v1/chat/completions", json=STREAM_REQUEST)
+    finally:
+        app.dependency_overrides.clear()
+
+    events = recorded(file_database)
+    assert len(events) == 1, "the request happened; it has to leave a trace"
+    assert events[0].upstream_status == 200
+
+
+def test_a_broken_stream_closes_its_connection(gateway_key):
+    """Otherwise a provider that drops connections slowly exhausts the pool,
+    and the gateway stops being able to call anybody."""
+    client, stream = broken_client(gateway_key, after=2)
+    try:
+        with pytest.raises(httpx.ReadError):
+            client.post("/v1/chat/completions", json=STREAM_REQUEST)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert stream.closed, "the connection was left open"
