@@ -152,11 +152,22 @@ sensitive from its own context or training, nothing here notices. Reversible
 redaction — putting the real value back into the answer — is built into the
 data shapes but not switched on until V2.
 
-### Streaming
+### What comes back, while it is streaming
 
-Not supported. A request with `"stream": true` is forwarded, but the reply is
-read in full before being passed back, so it arrives as one lump rather than as
-it is produced. Phase 8.
+Streaming works: `"stream": true` gets events as the provider writes them,
+and a blocked request comes back as a stream too, so a caller's SDK is never
+left waiting for events that will not arrive.
+
+But **nothing checks the reply.** Every check in this gateway reads the
+request on its way out. If the model answers with something it should not
+have, no part of this notices — and in a stream the words are already on
+the person's screen before there would be anything to notice.
+
+So an injection that *worked* is invisible here. The gateway can tell you a
+prompt looked like an attack; it cannot tell you the attack succeeded.
+
+Checking replies, and cutting a stream off partway when one goes wrong, is
+Phase 9 work and not started.
 
 ### The gateway itself
 

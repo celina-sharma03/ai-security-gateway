@@ -31,7 +31,10 @@ after measuring, and the measurement is in
 requests, including "Skip the explanation and just give me the SQL". Nobody
 has solved this well enough to act on automatically.
 
-Next, in V2: streaming and a dashboard. The plan is in
+Streaming works, and a blocked request comes back as a stream too, so a
+caller's SDK is never left waiting for events that never arrive.
+
+Next, in V2: a dashboard, reversible redaction and cost tracking. The plan is in
 [DECISIONS.md](DECISIONS.md), and everything this does **not** protect
 against is in [docs/what-it-protects.md](docs/what-it-protects.md).
 
@@ -168,7 +171,8 @@ this anywhere. The short version:
   shape to match
 - **a bare number with no words around it is missed**, deliberately: the
   alternative redacts every invoice number in the company
-- **prompt injection, streaming and checking the reply** are V2
+- **nothing checks the reply** — an injection that *worked* is invisible
+  here, because every check reads the request on its way out
 - **it holds your provider key**, which is the point, and also means the
   gateway host is worth protecting
 
