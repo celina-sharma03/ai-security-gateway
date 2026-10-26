@@ -319,6 +319,10 @@ Two things left open by Phase 5, both deliberate:
 **8 — Streaming.**
 *Exit: streaming works, and a block partway through cuts off cleanly.*
 
+**Met, with the second half read narrowly.** Streaming works, and a blocked request answers *as a stream* so a caller's SDK is never left waiting. There is no block partway through, because every check reads the request on its way out — stopping a reply mid-flight means checking the reply, which is Phase 9 and written up as a gap in [docs/what-it-protects.md](docs/what-it-protects.md).
+
+Two bugs found only by running it against a real provider, neither reachable from the test suite. A client hanging up mid-stream poisoned the connection pool and broke the *next* request — latent since Phase 5, and unreachable until a request lasted long enough to interrupt. And configuring the gateway broke its own tests, because settings read `.env` under pytest too: latent since Phase 0, invisible until somebody set the project up the way the README says to.
+
 **9 — Dashboard, reversible redaction, and cost tracking.** Login, live log of what got caught and by whom, settings for rules, spend per key. Placeholders restored in responses.
 *Exit: someone who has never seen the project understands what it does within thirty seconds of looking at the screen. A redacted email round-trips and comes back intact.*
 
