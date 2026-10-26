@@ -249,3 +249,42 @@ def test_a_quiet_week_is_reported_rather_than_left_blank(file_database, capsys):
     out = capsys.readouterr().out
     assert "What was caught:" in out
     assert "nothing" in out
+
+
+def test_the_cost_view_shows_tokens_and_never_money(file_database, capsys):
+    """Tokens, not money. A price list we do not maintain is a number that
+    eventually disagrees with an invoice, and that is worse than none."""
+    seed(file_database)
+
+    assert main(["events", "--cost"]) == 0
+
+    out = capsys.readouterr().out
+    assert "PROMPT" in out and "COMPLETION" in out
+    assert "$" not in out, "the gateway invented a price"
+    assert "Tokens, not money" in out
+
+
+def test_the_cost_view_separates_unknown_from_zero(file_database, capsys):
+    """A request the provider never priced is unknown, not free. Six failed
+    requests looking like free traffic is the Phase 5 mistake, and a cost
+    report is exactly where it would come back."""
+    seed(file_database)
+
+    assert main(["events", "--cost"]) == 0
+
+    out = capsys.readouterr().out
+    assert "UNKNOWN" in out
+
+
+def test_the_cost_view_names_the_model(file_database, capsys):
+    """Per model because that is the grain a price list works at. Without
+    it these numbers could never be priced at all."""
+    seed(file_database)
+
+    assert main(["events", "--cost"]) == 0
+    assert "MODEL" in capsys.readouterr().out
+
+
+def test_the_cost_view_on_an_empty_database_says_so(file_database, capsys):
+    assert main(["events", "--cost"]) == 0
+    assert "No keys yet" in capsys.readouterr().out

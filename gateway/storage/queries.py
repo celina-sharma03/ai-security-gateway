@@ -100,3 +100,79 @@ async def key_usage(session: AsyncSession) -> list[tuple[str, str, int]]:
     )
 
     return [tuple(row) for row in (await session.execute(query)).all()]
+
+
+async def spend_by_key(
+    session: AsyncSession,
+) -> list[tuple[str, str, str | None, int, int, int, int]]:
+    """Tokens per key: requests, prompt, completion.
+
+    Split into prompt and completion rather than reported as one total,
+    because providers charge differently for the two -- output is commonly
+    four times the price of input. A summary that added them together would
+    be unpriceable forever, since the split cannot be recovered afterwards.
+
+    No money here, deliberately. The gateway records what the provider said
+    was used and leaves the arithmetic to whoever knows what they are paying.
+    Shipping a price list we do not maintain is how a dashboard ends up
+    disagreeing with an invoice, and a number that disagrees with the bill is
+    worse than no number.
+
+    Keys with no traffic are included, with zeroes. "Which key has never been
+    used" is the question that gets one revoked.
+
+    **Requests whose cost is unknown are counted separately.** The first
+    version of this summed tokens with a coalesce to zero, and eleven failed
+    requests appeared as eleven requests costing nothing -- which is the
+    Phase 5 mistake exactly, where six failures looked like free traffic. A
+    request that never reached the provider did not cost nothing; nobody
+    ever said what it cost.
+    """
+    query = (
+        select(
+            Tenant.name,
+            ApiKey.prefix,
+            ApiKey.label,
+            func.count(Event.id),
+            func.coalesce(func.sum(Event.prompt_tokens), 0),
+            func.coalesce(func.sum(Event.completion_tokens), 0),
+            # `Event.id is not None` first, because the outer join below
+            # invents a row for every key with no traffic at all -- and
+            # without this a key that has never been used reports one
+            # request of unknown cost, which is a number about nothing.
+            func.sum(
+                case(
+                    (Event.id.is_not(None) & Event.total_tokens.is_(None), 1),
+                    else_=0,
+                )
+            ),
+        )
+        .join(ApiKey, ApiKey.tenant_id == Tenant.id)
+        .outerjoin(Event, Event.api_key_id == ApiKey.id)
+        .group_by(Tenant.name, ApiKey.prefix, ApiKey.label)
+        .order_by(desc(func.coalesce(func.sum(Event.prompt_tokens), 0)))
+    )
+
+    return [tuple(row) for row in (await session.execute(query)).all()]
+
+
+async def spend_by_model(session: AsyncSession) -> list[tuple[str, int, int, int, int]]:
+    """The same split, per model.
+
+    Per model because that is the grain a price list works at: an operator
+    who wants money multiplies these rows by their own rates. Without the
+    model name the numbers could never be priced at all.
+    """
+    query = (
+        select(
+            func.coalesce(Event.model, "unknown"),
+            func.count(Event.id),
+            func.coalesce(func.sum(Event.prompt_tokens), 0),
+            func.coalesce(func.sum(Event.completion_tokens), 0),
+            func.sum(case((Event.total_tokens.is_(None), 1), else_=0)),
+        )
+        .group_by(Event.model)
+        .order_by(desc(func.count(Event.id)))
+    )
+
+    return [tuple(row) for row in (await session.execute(query)).all()]

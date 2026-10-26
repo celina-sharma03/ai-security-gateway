@@ -199,3 +199,118 @@ def test_the_pool_checks_a_connection_before_handing_it_out():
     assert engine().pool._pre_ping, (
         "without pre-ping, a client hanging up mid-stream breaks the next request"
     )
+
+
+# --- Phase 9: what each key and model used ------------------------------
+# Tokens, never money. The gateway records what the provider reported and
+# leaves the arithmetic to whoever knows their own rates -- a price list we
+# do not maintain is a number that eventually disagrees with an invoice.
+
+
+async def a_priced_event(
+    db, key: ApiKey, *, prompt: int | None, completion: int | None, model: str = "m1"
+):
+    total = None if prompt is None or completion is None else prompt + completion
+    db.add(
+        Event(
+            tenant_id=key.tenant_id,
+            api_key_id=key.id,
+            model=model,
+            mode="enforce",
+            decided="allow",
+            action="allow",
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            total_tokens=total,
+        )
+    )
+    await db.commit()
+
+
+async def a_key(db, tenant: Tenant, prefix: str = "gw_live_aaa1") -> ApiKey:
+    key = ApiKey(tenant_id=tenant.id, label="CI", prefix=prefix, hash=prefix * 8)
+    db.add(key)
+    await db.commit()
+    return key
+
+
+async def test_tokens_are_counted_per_key(db):
+    from gateway.storage import queries
+
+    tenant = await a_tenant(db)
+    key = await a_key(db, tenant)
+    await a_priced_event(db, key, prompt=10, completion=20)
+    await a_priced_event(db, key, prompt=5, completion=7)
+
+    (row,) = await queries.spend_by_key(db)
+    _, _, _, requests, prompt, completion, unknown = row
+
+    assert (requests, prompt, completion, unknown) == (2, 15, 27, 0)
+
+
+async def test_prompt_and_completion_are_kept_apart(db):
+    """Providers charge differently for the two, often four to one. Added
+    together they could never be priced afterwards, and the split cannot be
+    recovered once it is lost."""
+    from gateway.storage import queries
+
+    tenant = await a_tenant(db)
+    key = await a_key(db, tenant)
+    await a_priced_event(db, key, prompt=100, completion=400)
+
+    (row,) = await queries.spend_by_key(db)
+
+    assert row[4] == 100
+    assert row[5] == 400
+
+
+async def test_a_request_with_no_reported_cost_is_counted_as_unknown(db):
+    """Not as zero. A request that never reached the provider did not cost
+    nothing -- nobody ever said what it cost. Six failed requests looking
+    like free traffic is the Phase 5 mistake, and this is where it would
+    come back."""
+    from gateway.storage import queries
+
+    tenant = await a_tenant(db)
+    key = await a_key(db, tenant)
+    await a_priced_event(db, key, prompt=10, completion=20)
+    await a_priced_event(db, key, prompt=None, completion=None)
+
+    (row,) = await queries.spend_by_key(db)
+    _, _, _, requests, prompt, completion, unknown = row
+
+    assert requests == 2
+    assert unknown == 1, "a request of unknown cost was counted as free"
+    assert (prompt, completion) == (10, 20)
+
+
+async def test_a_key_with_no_traffic_has_nothing_unknown(db):
+    """The outer join invents a row for a key that has never been used.
+    Counting it made an unused key report one request of unknown cost --
+    a number about nothing, in a report whose only value is being trusted."""
+    from gateway.storage import queries
+
+    tenant = await a_tenant(db)
+    await a_key(db, tenant)
+
+    (row,) = await queries.spend_by_key(db)
+    _, _, _, requests, prompt, completion, unknown = row
+
+    assert (requests, prompt, completion, unknown) == (0, 0, 0, 0)
+
+
+async def test_tokens_are_counted_per_model(db):
+    """Per model because that is the grain a price list works at. Without
+    the model name these numbers could never be priced at all."""
+    from gateway.storage import queries
+
+    tenant = await a_tenant(db)
+    key = await a_key(db, tenant)
+    await a_priced_event(db, key, prompt=10, completion=20, model="fast")
+    await a_priced_event(db, key, prompt=30, completion=40, model="slow")
+    await a_priced_event(db, key, prompt=1, completion=2, model="fast")
+
+    rows = {row[0]: row[1:] for row in await queries.spend_by_model(db)}
+
+    assert rows["fast"] == (2, 11, 22, 0)
+    assert rows["slow"] == (1, 30, 40, 0)

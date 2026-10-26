@@ -110,6 +110,7 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     events.add_argument(
         "--summary", action="store_true", help="totals per tenant instead of a list"
     )
+    events.add_argument("--cost", action="store_true", help="tokens per key and per model")
 
     serve = commands.add_parser("serve", help="run the proxy")
     serve.add_argument("--host", help=f"default {settings.host}, or GATEWAY_HOST")
@@ -204,7 +205,12 @@ async def _events(args: argparse.Namespace) -> int:
 
     try:
         async with database.sessions()() as session:
-            if args.summary:
+            if args.cost:
+                _show_cost(
+                    await queries.spend_by_key(session),
+                    await queries.spend_by_model(session),
+                )
+            elif args.summary:
                 _show_summary(
                     await queries.totals(session),
                     await queries.caught(session, args.tenant),
@@ -219,6 +225,61 @@ async def _events(args: argparse.Namespace) -> int:
         return 2
 
     return 0
+
+
+def _show_cost(by_key: list, by_model: list) -> None:
+    """What each key and each model used, in tokens.
+
+    No money. The gateway records what the provider said was used and leaves
+    the arithmetic to whoever knows what they are paying -- a price list we
+    do not maintain is a number that eventually disagrees with an invoice,
+    and that is worse than no number.
+
+    Prompt and completion are kept apart because providers charge
+    differently for them, often four to one. Added together they could never
+    be priced afterwards.
+    """
+    if not by_key:
+        print("No keys yet. Create one with `gateway keys create`.")
+        return
+
+    print(
+        f"{'TENANT':<14}{'KEY':<16}{'LABEL':<16}{'REQUESTS':>9}{'UNKNOWN':>9}"
+        f"{'PROMPT':>9}{'COMPLETION':>11}{'TOTAL':>9}"
+    )
+
+    unknown_total = 0
+    for tenant, prefix, label, requests, prompt, completion, unknown in by_key:
+        unknown_total += unknown or 0
+        print(
+            f"{tenant[:13]:<14}{prefix[:15]:<16}{(label or '-')[:15]:<16}"
+            f"{requests:>9}{unknown or 0:>9}{prompt:>9}"
+            f"{completion:>11}{prompt + completion:>9}"
+        )
+
+    if by_model:
+        print()
+        print(
+            f"{'MODEL':<32}{'REQUESTS':>9}{'UNKNOWN':>9}{'PROMPT':>9}{'COMPLETION':>11}{'TOTAL':>9}"
+        )
+        for model, requests, prompt, completion, unknown in by_model:
+            print(
+                f"{model[:31]:<32}{requests:>9}{unknown or 0:>9}{prompt:>9}"
+                f"{completion:>11}{prompt + completion:>9}"
+            )
+
+    print()
+    print("Tokens, not money. Multiply by your own rates -- the gateway does not")
+    print("ship a price list, because one that goes stale disagrees with your bill.")
+
+    if unknown_total:
+        # Said out loud, because a column of zeroes reads as "this was free"
+        # and means "nobody told us". Six failed requests looking like free
+        # traffic is the Phase 5 mistake, and this is where it would come
+        # back.
+        print()
+        print(f"UNKNOWN is {unknown_total} request(s) the provider never reported a cost for")
+        print("-- blocked, failed, or answered without usage. Not free: unmeasured.")
 
 
 def _show_events(events: list) -> None:
