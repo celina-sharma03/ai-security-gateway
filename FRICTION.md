@@ -1338,3 +1338,44 @@ Fixed by making the env file a setting of its own, with `conftest.py`
 emptying it before anything imports settings. A test suite whose results
 depend on the developer's local configuration is a test suite that means
 something different for every person who runs it.
+
+**The restored text nearly went out after the end of the stream.** Putting
+real values back into a streamed reply means holding a fragment that might
+be the start of a placeholder: `[EMA` is kept until `IL_1]` arrives, so the
+person never sees a broken placeholder flicker onto their screen.
+
+Which leaves the question of what happens to a fragment that never
+completes -- a model writing `[1]` as a citation, say. It has to be sent
+eventually, because it is the model's own text and swallowing it would be
+worse than showing a stray bracket.
+
+The first version flushed it after the loop ended. That is after
+`data: [DONE]` has already gone out, and a client stops reading at [DONE].
+The text would have been written to a connection nobody was listening to --
+present in the bytes, invisible to every user, and impossible to notice
+without reading the raw stream.
+
+Caught by writing the code rather than by a test, because the test would
+have reassembled the content from the events and found it all there. The
+failure is not in the content, it is in the **order**, and a test that
+concatenates events cannot see order.
+
+Now the flush happens when the end marker is recognised, before it is
+forwarded.
+
+**And a prompt that proved nothing.** The first live check asked the model
+to "mention the address", and it wrote `Address: 123 Main Street`. It had
+read "address" as a street address and never echoed the email at all, so
+there was nothing to restore and the test passed by vacuum:
+
+    contains the real address: False
+    contains a placeholder:    False
+
+Both false looks like success at a glance. It means the feature was never
+exercised. The second attempt asked the model to repeat the address back
+exactly, which forces the placeholder into the reply and makes the
+restoration observable.
+
+A test of a round trip has to make the round trip happen. An ambiguous
+prompt to a real model is a test that sometimes runs and sometimes does
+not, and reports the same thing either way.

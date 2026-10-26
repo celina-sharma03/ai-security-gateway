@@ -207,3 +207,77 @@ def restore(text: str, mapping: dict[str, str]) -> str:
 
     pattern = re.compile("|".join(re.escape(k) for k in mapping))
     return pattern.sub(lambda m: mapping[m.group(0)], text)
+
+
+#: Longest a held-back fragment can get before it is given up on.
+#:
+#: A placeholder is short -- `[CREDIT_CARD_1]` is fifteen characters. Anything
+#: longer that started with `[` is not one, and holding it would stall the
+#: stream waiting for a bracket that never closes. A model writing a citation
+#: like `[1]` or a markdown link must not be able to do that.
+LONGEST_PLACEHOLDER = 40
+
+
+class Restorer:
+    """Puts real values back into a reply that arrives in pieces.
+
+    A placeholder can be split across two chunks:
+
+        chunk 1:  "I'll email [EMA"
+        chunk 2:  "IL_1] today"
+
+    Substituting on each chunk alone finds nothing, and the person watching
+    sees `[EMA` flicker onto their screen -- which is the exact thing
+    reversible redaction exists to prevent.
+
+    So a chunk ending in what might be a placeholder is held back, and goes
+    out joined to the next one. The delay is a single chunk, and only on the
+    chunks that end mid-placeholder.
+
+    Deliberately stupid about what a placeholder looks like: an unclosed `[`
+    is suspicious, anything else is not, and a `[` that stays unclosed for
+    forty characters was never a placeholder at all.
+    """
+
+    def __init__(self, mapping: dict[str, str]) -> None:
+        self.mapping = mapping
+        self.pending = ""
+
+    def feed(self, text: str) -> str:
+        """Everything that is safe to send now."""
+        if not self.mapping:
+            return text
+
+        whole = self.pending + text
+        self.pending = ""
+
+        cut = self._unclosed_bracket(whole)
+        if cut is not None:
+            self.pending = whole[cut:]
+            whole = whole[:cut]
+
+        return restore(whole, self.mapping)
+
+    def flush(self) -> str:
+        """Whatever is still held back, at the end of the stream.
+
+        A placeholder that never completed is emitted as it stands. It is
+        the model's own text, and swallowing it would be worse than showing
+        a stray bracket.
+        """
+        left, self.pending = self.pending, ""
+        return restore(left, self.mapping) if left else ""
+
+    @staticmethod
+    def _unclosed_bracket(text: str) -> int | None:
+        """Where a possible placeholder starts, if the text ends inside one."""
+        start = text.rfind("[")
+
+        if start == -1 or "]" in text[start:]:
+            return None
+
+        # Too long to still be a placeholder, so it never was one.
+        if len(text) - start > LONGEST_PLACEHOLDER:
+            return None
+
+        return start

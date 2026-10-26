@@ -37,6 +37,7 @@ import time
 import uuid
 from typing import Any
 
+from gateway.engine.checks.redaction import Restorer, restore
 from gateway.providers.base import Usage
 
 _Location = tuple[Any, ...]
@@ -182,6 +183,96 @@ class OpenAIProvider:
             return body
 
         return {**body, "stream_options": {"include_usage": True}}
+
+    def restored(self, raw: bytes, mapping: dict[str, str]) -> bytes:
+        """The reply with the real values put back.
+
+        The provider answered about `[EMAIL_1]`, because that is all it was
+        given. The person who asked gets their colleague's address back, and
+        never knows the gateway was there -- which is the only version of
+        this anybody keeps switched on.
+
+        Parsed and rebuilt rather than substituted on the raw bytes, because
+        a restored value can contain characters JSON has opinions about. A
+        password with a quote in it would otherwise produce a reply that no
+        longer parses.
+
+        Forgiving, like `usage`: by this point the caller is owed an answer,
+        and a reply we cannot parse is one we pass along unchanged rather
+        than one we fail.
+        """
+        if not mapping:
+            return raw
+
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return raw
+
+        if not isinstance(payload, dict):
+            return raw
+
+        for choice in payload.get("choices") or []:
+            if not isinstance(choice, dict):
+                continue
+            message = choice.get("message")
+            if isinstance(message, dict) and isinstance(message.get("content"), str):
+                message["content"] = restore(message["content"], mapping)
+
+        return json.dumps(payload).encode()
+
+    def restored_event(self, event: bytes, restorer: Restorer) -> bytes:
+        """One streamed event, with whatever is safe to send restored.
+
+        The restorer holds back a fragment that might be the start of a
+        placeholder, so an event can come out with less text than it went in
+        with -- and the next one with more. `[DONE]` and anything
+        unparseable goes through untouched.
+        """
+        line = event.decode(errors="replace")
+        prefix, _, rest = line.partition("data: ")
+
+        payload = rest.strip()
+        if not payload or payload == "[DONE]":
+            return event
+
+        try:
+            parsed = json.loads(payload)
+        except (json.JSONDecodeError, ValueError):
+            return event
+
+        changed = False
+        for choice in parsed.get("choices") or []:
+            if not isinstance(choice, dict):
+                continue
+            delta = choice.get("delta")
+            if isinstance(delta, dict) and isinstance(delta.get("content"), str):
+                delta["content"] = restorer.feed(delta["content"])
+                changed = True
+
+        if not changed:
+            return event
+
+        return f"{prefix}data: {json.dumps(parsed)}\n\n".encode()
+
+    def is_end_of_stream(self, event: bytes) -> bool:
+        """True for the `data: [DONE]` marker that ends a stream.
+
+        Worth knowing about, because a client stops reading there. Anything
+        the gateway still owes the caller has to go out before it.
+        """
+        return event.decode(errors="replace").strip() == "data: [DONE]"
+
+    def text_event(self, body: dict, text: str) -> bytes:
+        """One event carrying a piece of text, in this provider's shape."""
+        event = {
+            "id": f"chatcmpl-gateway-{uuid.uuid4().hex[:16]}",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": body.get("model", "unknown"),
+            "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}],
+        }
+        return f"data: {json.dumps(event)}\n\n".encode()
 
     def is_usage_event(self, event: bytes) -> bool:
         """True when this event is only a usage report.

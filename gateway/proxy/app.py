@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from gateway import __version__
 from gateway.console import use_utf8_output
+from gateway.engine.checks.redaction import Restorer
 from gateway.engine.pipeline import Pipeline, build_pipeline
 from gateway.engine.result import Action
 from gateway.engine.rules import load_rules
@@ -260,6 +261,14 @@ async def chat_completions(
     scores = [result.score for result in results if result.score is not None]
     seen = [result.coverage for result in results if result.coverage is not None]
 
+    # Placeholder back to the real value, for putting them into the reply.
+    # Held for the length of this request and never written down -- the
+    # whole point of the gateway is that this pairing exists nowhere else.
+    # Empty in shadow mode, because nothing was replaced.
+    mapping: dict[str, str] = {}
+    for result in results:
+        mapping.update(result.mapping)
+
     # The verdict, for anything reading by machine. The body carries the
     # provider's answer, so this is the only place a client can see what the
     # gateway did without being told.
@@ -414,6 +423,13 @@ async def chat_completions(
             """
             collected: list[bytes] = []
             buffer = b""
+
+            # Stateful across the whole stream, because a placeholder can be
+            # split between two events -- "[EMA" in one and "IL_1]" in the
+            # next. It holds back the fragment that might be the start of
+            # one, so a broken placeholder never reaches the screen.
+            restorer = Restorer(mapping)
+
             try:
                 async with stack:
                     async for piece in sent.aiter_bytes():
@@ -432,7 +448,18 @@ async def chat_completions(
                             if asked_for_usage and provider.is_usage_event(event):
                                 continue
 
-                            yield event
+                            # Anything still held goes out *before* the end
+                            # marker, not after: a client stops reading at
+                            # [DONE], so text sent afterwards is text nobody
+                            # ever sees. Usually a `[` that never closed --
+                            # the model's own, and swallowing it would be
+                            # worse than showing a stray bracket.
+                            if provider.is_end_of_stream(event):
+                                left = restorer.flush()
+                                if left:
+                                    yield provider.text_event(body, left)
+
+                            yield provider.restored_event(event, restorer)
 
                     if buffer:
                         yield buffer
@@ -491,7 +518,15 @@ async def chat_completions(
             # disagrees with the invoice is worse than no number at all.
             counted = provider.usage(sent.body)
             response = Response(
-                content=sent.body,
+                # The real values go back in. The provider answered about
+                # [EMAIL_1] because that is all it was given; the person who
+                # asked gets their colleague's address, and never learns the
+                # gateway was involved. A draft email addressed to
+                # [EMAIL_1] is the version nobody keeps switched on.
+                #
+                # Empty in shadow mode, where nothing was replaced, so this
+                # is a no-op there.
+                content=provider.restored(sent.body, mapping),
                 status_code=sent.status_code,
                 media_type=sent.media_type,
                 headers=headers,
